@@ -2,181 +2,408 @@
 <!DOCTYPE html>
 <html lang="bn">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard - Earn Master BD</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin Panel - Earn Master BD</title>
 
-    <style>
-        * { box-sizing: border-box; }
+<style>
+* { box-sizing: border-box; }
 
-        body {
-            margin: 0;
-            background: #eef3f9;
-            font-family: Arial, sans-serif;
-            color: #17233b;
-        }
+body {
+    margin: 0;
+    background: #eef3f9;
+    color: #17233b;
+    font-family: Arial, sans-serif;
+}
 
-        header {
-            background: #101d3b;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
+header {
+    background: #0755a5;
+    color: white;
+    padding: 20px;
+    text-align: center;
+}
 
-        header a {
-            color: white;
-            text-decoration: none;
-        }
+.container {
+    max-width: 950px;
+    margin: auto;
+    padding: 15px;
+}
 
-        .container {
-            max-width: 900px;
-            margin: auto;
-            padding: 15px;
-        }
+.card {
+    background: white;
+    padding: 20px;
+    margin: 15px 0;
+    border-radius: 12px;
+    box-shadow: 0 3px 12px #00000012;
+}
 
-        .card {
-            background: white;
-            padding: 20px;
-            margin: 15px 0;
-            border-radius: 12px;
-            box-shadow: 0 3px 12px #00000012;
-            overflow-wrap: anywhere;
-        }
+h3 { color: #0755a5; }
 
-        input, textarea {
-            width: 100%;
-            padding: 12px;
-            margin: 7px 0;
-            border: 1px solid #ccd5e0;
-            border-radius: 8px;
-            font-size: 15px;
-        }
+input, select, textarea {
+    width: 100%;
+    padding: 12px;
+    margin: 7px 0;
+    border: 1px solid #ccd5e0;
+    border-radius: 8px;
+    font-size: 15px;
+}
 
-        button {
-            padding: 10px 15px;
-            margin: 5px 3px;
-            border: none;
-            border-radius: 7px;
-            background: #0875d1;
-            color: white;
-            font-weight: bold;
-        }
+button {
+    padding: 11px 15px;
+    border: none;
+    border-radius: 7px;
+    background: #0875d1;
+    color: white;
+    cursor: pointer;
+    margin: 4px 2px;
+}
 
-        .reject {
-            background: #d93030;
-        }
+.danger { background: #d93636; }
+.success { background: #168447; }
+.logout { color: white; }
 
-        h2 { color: #0755a5; }
+.item {
+    border-bottom: 1px solid #ddd;
+    padding: 13px 0;
+}
 
-        .item {
-            padding: 12px 0;
-            border-bottom: 1px solid #ddd;
-        }
-    </style>
+.item:last-child { border-bottom: none; }
+
+.message {
+    background: #e0f5e8;
+    color: #176b35;
+    padding: 12px;
+    margin: 10px 0;
+    border-radius: 8px;
+}
+
+.status {
+    display: inline-block;
+    padding: 5px 9px;
+    background: #eee;
+    border-radius: 6px;
+    font-size: 13px;
+}
+
+.pending { background: #fff0c2; }
+.approved { background: #d9f8e5; }
+.rejected { background: #ffe0e0; }
+
+small { color: #68758a; }
+
+</style>
 </head>
 
 <body>
 
 <header>
-    <h1>Earn Master BD</h1>
-    <h3>ADMIN DASHBOARD</h3>
-    <a href="/logout">লগআউট</a>
+    <h2>Earn Master BD</h2>
+    <h3 style="color:white;">Admin Dashboard</h3>
+    <a class="logout" href="/admin/logout">Logout</a>
 </header>
 
 <div class="container">
 
-    <div class="card">
-        <h2>➕ নতুন কাজ যোগ করুন</h2>
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+        <div class="message">{{ message }}</div>
+    {% endfor %}
+{% endwith %}
 
-        <form method="POST" action="/admin/task">
-            <input type="text" name="title"
-                   placeholder="কাজের নাম" required>
 
-            <textarea name="description"
-                      placeholder="কাজের বিবরণ"></textarea>
+<!-- USER MANAGEMENT -->
 
-            <input type="number" name="reward"
-                   step="0.01" min="0"
-                   placeholder="কাজের পুরস্কার" required>
+<div class="card">
+    <h3>👥 User Management</h3>
 
-            <button type="submit">কাজ যোগ করুন</button>
-        </form>
-    </div>
+    <input
+        type="text"
+        id="userSearch"
+        placeholder="ইউজারের নাম বা আইডি দিয়ে খুঁজুন"
+        oninput="searchUsers()"
+    >
 
-    <div class="card">
-        <h2>👥 ব্যবহারকারীদের তালিকা</h2>
+    <p>মোট ইউজার: {{ users|length }}</p>
 
-        {% for user in users %}
-            <div class="item">
-                <b>{{ user.username }}</b>
-                <p>ব্যালেন্স: ৳{{ user.balance }}</p>
-                <p>রেফার কোড: {{ user.referral_code }}</p>
-            </div>
-        {% else %}
-            <p>কোনো ব্যবহারকারী নেই।</p>
-        {% endfor %}
-    </div>
+    {% for user in users %}
+        <div class="item user-item">
+            <h4>{{ user.username }}</h4>
 
-    <div class="card">
-        <h2>💳 উইথড্র আবেদন</h2>
+            <p>ইউজার ID: {{ user.id }}</p>
+            <p>রেফার কোড: {{ user.referral_code }}</p>
+            <p>বর্তমান ব্যালেন্স: ৳{{ user.balance }}</p>
 
-        {% for item in withdrawals %}
-            <div class="item">
-                <b>ইউজার:</b> {{ item.user.username }}
-                <p>পরিমাণ: ৳{{ item.amount }}</p>
-                <p>মাধ্যম: {{ item.method }}</p>
-                <p>নম্বর: {{ item.account }}</p>
-                <p>অবস্থা: {{ item.status }}</p>
+            <small>যোগদানের তারিখ: {{ user.created_at.strftime('%d-%m-%Y') }}</small>
+        </div>
+    {% else %}
+        <p>কোনো ব্যবহারকারী নেই।</p>
+    {% endfor %}
+</div>
 
-                {% if item.status == "pending" %}
-                    <form method="POST"
-                          action="/admin/withdraw/{{ item.id }}">
-                        <button name="action" value="approve">
-                            অনুমোদন
-                        </button>
 
-                        <button class="reject"
-                                name="action" value="reject">
-                            বাতিল
-                        </button>
-                    </form>
-                {% endif %}
-            </div>
-        {% else %}
-            <p>কোনো উইথড্র আবেদন নেই।</p>
-        {% endfor %}
-    </div>
+<!-- BALANCE MANAGEMENT -->
 
-    <div class="card">
-        <h2>📋 কাজের আবেদন</h2>
+<div class="card">
+    <h3>💰 User Balance Add / Remove</h3>
 
-        {% for claim in claims %}
-            <div class="item">
-                <b>ইউজার:</b> {{ claim.user.username }}
-                <p>কাজ: {{ claim.task.title }}</p>
-                <p>পুরস্কার: ৳{{ claim.task.reward }}</p>
-                <p>অবস্থা: {{ claim.status }}</p>
+    <form method="POST" action="/admin/balance">
 
-                {% if claim.status == "pending" %}
-                    <form method="POST"
-                          action="/admin/claim/{{ claim.id }}">
-                        <button name="action" value="approve">
-                            অনুমোদন
-                        </button>
+        <label>ইউজার নির্বাচন করুন</label>
 
-                        <button class="reject"
-                                name="action" value="reject">
-                            বাতিল
-                        </button>
-                    </form>
-                {% endif %}
-            </div>
-        {% else %}
-            <p>কোনো কাজের আবেদন নেই।</p>
-        {% endfor %}
-    </div>
+        <select name="user_id" required>
+            <option value="">ইউজার নির্বাচন করুন</option>
+
+            {% for user in users %}
+                <option value="{{ user.id }}">
+                    {{ user.username }} - ID: {{ user.id }}
+                </option>
+            {% endfor %}
+        </select>
+
+        <label>টাকার পরিমাণ</label>
+        <input
+            type="number"
+            name="amount"
+            min="1"
+            step="1"
+            placeholder="টাকার পরিমাণ"
+            required
+        >
+
+        <label>কাজ নির্বাচন করুন</label>
+        <select name="action" required>
+            <option value="">নির্বাচন করুন</option>
+            <option value="add">টাকা যোগ করুন</option>
+            <option value="remove">টাকা কমান</option>
+        </select>
+
+        <label>কারণ লিখুন</label>
+        <input
+            type="text"
+            name="reason"
+            placeholder="ব্যালেন্স পরিবর্তনের কারণ"
+            required
+        >
+
+        <button type="submit">ব্যালেন্স আপডেট করুন</button>
+    </form>
+</div>
+
+
+<!-- BALANCE HISTORY -->
+
+<div class="card">
+    <h3>📜 Balance Transaction History</h3>
+
+    {% for item in transactions %}
+        <div class="item">
+
+            <p>ইউজার: {{ item.user.username }}</p>
+            <p>ইউজার ID: {{ item.user_id }}</p>
+
+            {% if item.action == 'add' %}
+                <p style="color:green;">
+                    টাকা যোগ: +৳{{ item.amount }}
+                </p>
+            {% else %}
+                <p style="color:red;">
+                    টাকা কমানো: -৳{{ item.amount }}
+                </p>
+            {% endif %}
+
+            <p>কারণ: {{ item.reason }}</p>
+            <small>অ্যাডমিন: {{ item.admin_username }}</small>
+            <br>
+            <small>
+                তারিখ:
+                {{ item.created_at.strftime('%d-%m-%Y %I:%M %p') }}
+            </small>
+
+        </div>
+    {% else %}
+        <p>এখনো কোনো ব্যালেন্স পরিবর্তনের হিস্টোরি নেই।</p>
+    {% endfor %}
+</div>
+
+
+<!-- ADD TASK -->
+
+<div class="card">
+    <h3>➕ নতুন কাজ যোগ করুন</h3>
+
+    <form method="POST" action="/admin/task">
+
+        <label>কাজের নাম</label>
+        <input
+            type="text"
+            name="title"
+            placeholder="কাজের নাম"
+            required
+        >
+
+        <label>কাজের বিবরণ</label>
+        <textarea
+            name="description"
+            placeholder="কাজের বিবরণ"
+            required
+        ></textarea>
+
+        <label>পুরস্কার</label>
+        <input
+            type="number"
+            name="reward"
+            min="1"
+            step="1"
+            placeholder="পুরস্কার"
+            required
+        >
+
+        <button type="submit">কাজ যোগ করুন</button>
+    </form>
+</div>
+
+
+<!-- TASK LIST -->
+
+<div class="card">
+    <h3>💼 প্রকাশিত কাজ</h3>
+
+    {% for task in tasks %}
+        <div class="item">
+            <h4>{{ task.title }}</h4>
+            <p>{{ task.description }}</p>
+            <p>পুরস্কার: ৳{{ task.reward }}</p>
+            <span class="status">
+                {{ 'চালু' if task.active else 'বন্ধ' }}
+            </span>
+        </div>
+    {% else %}
+        <p>কোনো কাজ নেই।</p>
+    {% endfor %}
+</div>
+
+
+<!-- TASK CLAIMS -->
+
+<div class="card">
+    <h3>📋 কাজের আবেদন</h3>
+
+    {% for claim in claims %}
+        <div class="item">
+
+            <p>ইউজার: {{ claim.user.username }}</p>
+            <p>কাজ: {{ claim.task.title }}</p>
+            <p>পুরস্কার: ৳{{ claim.task.reward }}</p>
+
+            <p>
+                অবস্থা:
+                <span class="status {{ claim.status }}">
+                    {{ claim.status }}
+                </span>
+            </p>
+
+            {% if claim.status == 'pending' %}
+
+                <form method="POST"
+                      action="/admin/claim/{{ claim.id }}"
+                      style="display:inline;">
+
+                    <input type="hidden" name="action" value="approve">
+                    <button class="success" type="submit">
+                        Approve
+                    </button>
+                </form>
+
+                <form method="POST"
+                      action="/admin/claim/{{ claim.id }}"
+                      style="display:inline;">
+
+                    <input type="hidden" name="action" value="reject">
+                    <button class="danger" type="submit">
+                        Reject
+                    </button>
+                </form>
+
+            {% endif %}
+
+        </div>
+    {% else %}
+        <p>কোনো কাজের আবেদন নেই।</p>
+    {% endfor %}
+</div>
+
+
+<!-- WITHDRAW REQUESTS -->
+
+<div class="card">
+    <h3>💳 Withdrawal Requests</h3>
+
+    {% for item in withdrawals %}
+        <div class="item">
+
+            <h4>উইথড্র: ৳{{ item.amount }}</h4>
+
+            <p>ইউজার: {{ item.user.username }}</p>
+            <p>মাধ্যম: {{ item.method|upper }}</p>
+            <p>অ্যাকাউন্ট: {{ item.account_number }}</p>
+
+            <p>
+                অবস্থা:
+                <span class="status {{ item.status }}">
+                    {{ item.status }}
+                </span>
+            </p>
+
+            {% if item.status == 'pending' %}
+
+                <form method="POST"
+                      action="/admin/withdraw/{{ item.id }}"
+                      style="display:inline;">
+
+                    <input type="hidden" name="action" value="approve">
+                    <button class="success" type="submit">
+                        Approve
+                    </button>
+                </form>
+
+                <form method="POST"
+                      action="/admin/withdraw/{{ item.id }}"
+                      style="display:inline;">
+
+                    <input type="hidden" name="action" value="reject">
+                    <button class="danger" type="submit">
+                        Reject
+                    </button>
+                </form>
+
+            {% endif %}
+
+        </div>
+    {% else %}
+        <p>কোনো উইথড্র আবেদন নেই।</p>
+    {% endfor %}
+</div>
 
 </div>
+
+
+<script>
+function searchUsers() {
+    const search = document
+        .getElementById("userSearch")
+        .value.toLowerCase();
+
+    const users = document.querySelectorAll(".user-item");
+
+    users.forEach(function(user) {
+        const text = user.innerText.toLowerCase();
+
+        user.style.display = text.includes(search)
+            ? "block"
+            : "none";
+    });
+}
+</script>
 
 </body>
 </html>

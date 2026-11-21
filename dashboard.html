@@ -1,1 +1,123 @@
-{% extends "base.html" %}{% block content %}<h1>আপনার ড্যাশবোর্ড</h1><section class="grid"><article><small>বর্তমান ব্যালেন্স</small><strong>৳{{'%.2f'|format(user.balance)}}</strong></article><article><small>সফল রেফারেল</small><strong>{{refs}} / 3</strong></article><article><small>উত্তোলন</small><strong>{% if refs >= 3 %}চালু{% else %}৩ রেফারেল বাকি{% endif %}</strong></article></section><div class="panel"><h3>আপনার রেফারেল লিংক</h3><input readonly value="{{request.url_root}}register?ref={{user.referral_code}}" onclick="this.select()"><p class="muted">এই লিংক দিয়ে নতুন ইউজার রেজিস্ট্রেশন করলে সফল রেফারেল হিসেবে গণনা হবে। অপব্যবহার রোধে পরবর্তীতে ফোন/OTP যাচাই যোগ করুন।</p></div><div class="panel"><h2>উপলব্ধ কাজ</h2>{% for task in tasks %}<div class="task"><div><b>{{task.title}}</b><p>{{task.description}}</p><small>পুরস্কার: ৳{{'%.2f'|format(task.reward)}} · অবস্থা: {{submitted.get(task.id,'জমা হয়নি')}}</small></div>{% if task.id not in submitted %}<form method="post" action="{{url_for('submit_task',task_id=task.id)}}"><input name="proof" placeholder="কাজের প্রমাণ/বিবরণ" required><button class="btn small">জমা দিন</button></form>{% endif %}</div>{% else %}<p>এখনো কোনো কাজ যোগ করা হয়নি।</p>{% endfor %}</div><div class="panel"><h2>টাকা উত্তোলন</h2>{% if refs < 3 %}<p class="warning">উত্তোলনের আগে আরও {{3-refs}} জন সফল রেফারেল প্রয়োজন।</p>{% else %}<form method="post" action="{{url_for('withdraw')}}"><label>পরিমাণ (সর্বনিম্ন ৳১০০)</label><input type="number" name="amount" min="100" step="0.01" max="{{user.balance}}" required><label>মাধ্যম</label><select name="method"><option>bKash</option><option>Nagad</option><option>Rocket</option></select><label>অ্যাকাউন্ট নম্বর</label><input name="account_number" required><button class="btn">উত্তোলনের আবেদন</button></form>{% endif %}</div><div class="panel"><h3>সাম্প্রতিক উত্তোলন</h3>{% for w in withdrawals %}<p>৳{{w.amount}} · {{w.method}} · {{w.status}}</p>{% else %}<p>কোনো আবেদন নেই।</p>{% endfor %}</div>{% endblock %}
+
+{% extends "base.html" %}
+
+{% block content %}
+<h1>আপনার ড্যাশবোর্ড</h1>
+
+<section class="grid">
+    <article>
+        <small>বর্তমান ব্যালেন্স</small>
+        <strong>৳{{ user.balance|money }}</strong>
+    </article>
+
+    <article>
+        <small>সফল রেফারেল</small>
+        <strong>{{ referral_count }} / 3</strong>
+    </article>
+
+    <article>
+        <small>উত্তোলন</small>
+        <strong>
+            {% if referral_count >= 3 %}
+                চালু
+            {% else %}
+                ৩ রেফারেল প্রয়োজন
+            {% endif %}
+        </strong>
+    </article>
+</section>
+
+<div class="panel">
+    <h3>আপনার রেফারেল লিংক</h3>
+    <input readonly value="{{ referral_url }}" onclick="this.select()">
+    <p class="muted">
+        এই লিংক দিয়ে নতুন ইউজার রেজিস্ট্রেশন করলে সফল রেফারেল হিসেবে গণনা হবে।
+    </p>
+</div>
+
+<div class="panel">
+    <h2>উপলব্ধ কাজ</h2>
+
+    {% for task in tasks %}
+        <div class="task">
+            <div>
+                <b>{{ task.title }}</b>
+                <p>{{ task.description }}</p>
+
+                <small>
+                    পুরস্কার: ৳{{ task.reward|money }}
+                </small>
+
+                {% for claim in claims %}
+                    {% if claim.task_id == task.id %}
+                        <p>অবস্থা: {{ claim.status }}</p>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            {% set already_submitted = namespace(value=false) %}
+            {% for claim in claims %}
+                {% if claim.task_id == task.id %}
+                    {% set already_submitted.value = true %}
+                {% endif %}
+            {% endfor %}
+
+            {% if not already_submitted.value %}
+                <form method="post" action="{{ url_for('submit_task', task_id=task.id) }}">
+                    <input name="proof" placeholder="কাজের প্রমাণ/বিবরণ" required>
+                    <button class="btn small">জমা দিন</button>
+                </form>
+            {% endif %}
+        </div>
+    {% else %}
+        <p>এখনো কোনো কাজ যোগ করা হয়নি।</p>
+    {% endfor %}
+</div>
+
+<div class="panel">
+    <h2>টাকা উত্তোলন</h2>
+
+    {% if referral_count < 3 %}
+        <p class="warning">
+            উত্তোলনের আগে আরও {{ 3 - referral_count }} জন সফল রেফারেল প্রয়োজন।
+        </p>
+    {% else %}
+        <form method="post" action="{{ url_for('withdraw') }}">
+            <label>পরিমাণ (সর্বনিম্ন ৳১০০)</label>
+            <input
+                type="number"
+                name="amount"
+                min="100"
+                step="0.01"
+                max="{{ '%.2f'|format(user.balance / 100) }}"
+                required
+            >
+
+            <label>মাধ্যম</label>
+            <select name="method">
+                <option>bKash</option>
+                <option>Nagad</option>
+                <option>Rocket</option>
+            </select>
+
+            <label>অ্যাকাউন্ট নম্বর</label>
+            <input name="account" required>
+
+            <button class="btn">উত্তোলনের আবেদন</button>
+        </form>
+    {% endif %}
+</div>
+
+<div class="panel">
+    <h3>সাম্প্রতিক উত্তোলন</h3>
+
+    {% for w in withdrawals|default([]) %}
+        <p>
+            ৳{{ w.amount|money }} · {{ w.method }} · {{ w.status }}
+        </p>
+    {% else %}
+        <p>কোনো আবেদন নেই।</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

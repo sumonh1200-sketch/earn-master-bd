@@ -90,7 +90,6 @@ button {
 .rejected { background: #ffe0e0; }
 
 small { color: #68758a; }
-
 </style>
 </head>
 
@@ -110,7 +109,6 @@ small { color: #68758a; }
     {% endfor %}
 {% endwith %}
 
-
 <!-- USER MANAGEMENT -->
 
 <div class="card">
@@ -128,11 +126,9 @@ small { color: #68758a; }
     {% for user in users %}
         <div class="item user-item">
             <h4>{{ user.username }}</h4>
-
             <p>ইউজার ID: {{ user.id }}</p>
             <p>রেফার কোড: {{ user.referral_code }}</p>
-            <p>বর্তমান ব্যালেন্স: ৳{{ user.balance }}</p>
-
+            <p>বর্তমান ব্যালেন্স: ৳{{ user.balance|money }}</p>
             <small>যোগদানের তারিখ: {{ user.created_at.strftime('%d-%m-%Y') }}</small>
         </div>
     {% else %}
@@ -140,19 +136,16 @@ small { color: #68758a; }
     {% endfor %}
 </div>
 
-
 <!-- BALANCE MANAGEMENT -->
 
 <div class="card">
     <h3>💰 User Balance Add / Remove</h3>
 
     <form method="POST" action="/admin/balance">
-
         <label>ইউজার নির্বাচন করুন</label>
 
         <select name="user_id" required>
             <option value="">ইউজার নির্বাচন করুন</option>
-
             {% for user in users %}
                 <option value="{{ user.id }}">
                     {{ user.username }} - ID: {{ user.id }}
@@ -164,9 +157,9 @@ small { color: #68758a; }
         <input
             type="number"
             name="amount"
-            min="1"
-            step="1"
-            placeholder="টাকার পরিমাণ"
+            min="0.01"
+            step="0.01"
+            placeholder="যেমন: 0.50"
             required
         >
 
@@ -189,7 +182,6 @@ small { color: #68758a; }
     </form>
 </div>
 
-
 <!-- BALANCE HISTORY -->
 
 <div class="card">
@@ -197,17 +189,16 @@ small { color: #68758a; }
 
     {% for item in transactions %}
         <div class="item">
-
             <p>ইউজার: {{ item.user.username }}</p>
             <p>ইউজার ID: {{ item.user_id }}</p>
 
             {% if item.action == 'add' %}
                 <p style="color:green;">
-                    টাকা যোগ: +৳{{ item.amount }}
+                    টাকা যোগ: +৳{{ item.amount|money }}
                 </p>
             {% else %}
                 <p style="color:red;">
-                    টাকা কমানো: -৳{{ item.amount }}
+                    টাকা কমানো: -৳{{ item.amount|money }}
                 </p>
             {% endif %}
 
@@ -215,16 +206,13 @@ small { color: #68758a; }
             <small>অ্যাডমিন: {{ item.admin_username }}</small>
             <br>
             <small>
-                তারিখ:
-                {{ item.created_at.strftime('%d-%m-%Y %I:%M %p') }}
+                তারিখ: {{ item.created_at.strftime('%d-%m-%Y %I:%M %p') }}
             </small>
-
         </div>
     {% else %}
         <p>এখনো কোনো ব্যালেন্স পরিবর্তনের হিস্টোরি নেই।</p>
     {% endfor %}
 </div>
-
 
 <!-- ADD TASK -->
 
@@ -232,36 +220,26 @@ small { color: #68758a; }
     <h3>➕ নতুন কাজ যোগ করুন</h3>
 
     <form method="POST" action="/admin/task">
-
         <label>কাজের নাম</label>
-        <input
-            type="text"
-            name="title"
-            placeholder="কাজের নাম"
-            required
-        >
+        <input type="text" name="title" placeholder="কাজের নাম" required>
 
         <label>কাজের বিবরণ</label>
-        <textarea
-            name="description"
-            placeholder="কাজের বিবরণ"
-            required
-        ></textarea>
+        <textarea name="description" placeholder="কাজের বিবরণ" required></textarea>
 
         <label>পুরস্কার</label>
         <input
             type="number"
             name="reward"
-            min="1"
-            step="1"
-            placeholder="পুরস্কার"
+            min="0.01"
+            step="0.01"
+            value="0.50"
+            placeholder="যেমন: 0.50"
             required
         >
 
         <button type="submit">কাজ যোগ করুন</button>
     </form>
 </div>
-
 
 <!-- TASK LIST -->
 
@@ -272,7 +250,7 @@ small { color: #68758a; }
         <div class="item">
             <h4>{{ task.title }}</h4>
             <p>{{ task.description }}</p>
-            <p>পুরস্কার: ৳{{ task.reward }}</p>
+            <p>পুরস্কার: ৳{{ task.reward|money }}</p>
             <span class="status">
                 {{ 'চালু' if task.active else 'বন্ধ' }}
             </span>
@@ -282,7 +260,6 @@ small { color: #68758a; }
     {% endfor %}
 </div>
 
-
 <!-- TASK CLAIMS -->
 
 <div class="card">
@@ -290,10 +267,9 @@ small { color: #68758a; }
 
     {% for claim in claims %}
         <div class="item">
-
             <p>ইউজার: {{ claim.user.username }}</p>
             <p>কাজ: {{ claim.task.title }}</p>
-            <p>পুরস্কার: ৳{{ claim.task.reward }}</p>
+            <p>পুরস্কার: ৳{{ claim.task.reward|money }}</p>
 
             <p>
                 অবস্থা:
@@ -303,35 +279,21 @@ small { color: #68758a; }
             </p>
 
             {% if claim.status == 'pending' %}
-
-                <form method="POST"
-                      action="/admin/claim/{{ claim.id }}"
-                      style="display:inline;">
-
+                <form method="POST" action="/admin/claim/{{ claim.id }}" style="display:inline;">
                     <input type="hidden" name="action" value="approve">
-                    <button class="success" type="submit">
-                        Approve
-                    </button>
+                    <button class="success" type="submit">Approve</button>
                 </form>
 
-                <form method="POST"
-                      action="/admin/claim/{{ claim.id }}"
-                      style="display:inline;">
-
+                <form method="POST" action="/admin/claim/{{ claim.id }}" style="display:inline;">
                     <input type="hidden" name="action" value="reject">
-                    <button class="danger" type="submit">
-                        Reject
-                    </button>
+                    <button class="danger" type="submit">Reject</button>
                 </form>
-
             {% endif %}
-
         </div>
     {% else %}
         <p>কোনো কাজের আবেদন নেই।</p>
     {% endfor %}
 </div>
-
 
 <!-- WITHDRAW REQUESTS -->
 
@@ -340,8 +302,7 @@ small { color: #68758a; }
 
     {% for item in withdrawals %}
         <div class="item">
-
-            <h4>উইথড্র: ৳{{ item.amount }}</h4>
+            <h4>উইথড্র: ৳{{ item.amount|money }}</h4>
 
             <p>ইউজার: {{ item.user.username }}</p>
             <p>মাধ্যম: {{ item.method|upper }}</p>
@@ -355,29 +316,16 @@ small { color: #68758a; }
             </p>
 
             {% if item.status == 'pending' %}
-
-                <form method="POST"
-                      action="/admin/withdraw/{{ item.id }}"
-                      style="display:inline;">
-
+                <form method="POST" action="/admin/withdraw/{{ item.id }}" style="display:inline;">
                     <input type="hidden" name="action" value="approve">
-                    <button class="success" type="submit">
-                        Approve
-                    </button>
+                    <button class="success" type="submit">Approve</button>
                 </form>
 
-                <form method="POST"
-                      action="/admin/withdraw/{{ item.id }}"
-                      style="display:inline;">
-
+                <form method="POST" action="/admin/withdraw/{{ item.id }}" style="display:inline;">
                     <input type="hidden" name="action" value="reject">
-                    <button class="danger" type="submit">
-                        Reject
-                    </button>
+                    <button class="danger" type="submit">Reject</button>
                 </form>
-
             {% endif %}
-
         </div>
     {% else %}
         <p>কোনো উইথড্র আবেদন নেই।</p>
@@ -386,21 +334,14 @@ small { color: #68758a; }
 
 </div>
 
-
 <script>
 function searchUsers() {
-    const search = document
-        .getElementById("userSearch")
-        .value.toLowerCase();
-
+    const search = document.getElementById("userSearch").value.toLowerCase();
     const users = document.querySelectorAll(".user-item");
 
     users.forEach(function(user) {
         const text = user.innerText.toLowerCase();
-
-        user.style.display = text.includes(search)
-            ? "block"
-            : "none";
+        user.style.display = text.includes(search) ? "block" : "none";
     });
 }
 </script>

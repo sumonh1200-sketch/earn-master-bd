@@ -1,0 +1,30 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>রেজিস্ট্রেশন - Earn Master BD</title>
+</head>
+<body>
+    <h2>নতুন অ্যাকাউন্ট খুলুন</h2>
+
+    {% with messages = get_flashed_messages() %}
+      {% for message in messages %}
+        <p>{{ message }}</p>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST">
+        <input name="username" placeholder="আপনার নাম" required>
+        <br><br>
+        <input name="password" type="password" placeholder="পাসওয়ার্ড" required>
+        <br><br>
+        <input name="referral" placeholder="রেফার কোড (ঐচ্ছিক)">
+        <br><br>
+        <button type="submit">রেজিস্ট্রেশন করুন</button>
+    </form>
+
+    <p><a href="/login">আগে অ্যাকাউন্ট আছে? লগইন</a></p>
+</body>
+</html>

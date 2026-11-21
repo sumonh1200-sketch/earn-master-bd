@@ -1,314 +1,396 @@
+
 import os
-import sqlite3
-from datetime import datetime, date
-from zoneinfo import ZoneInfo
+import secrets
+from datetime import datetime
 from functools import wraps
 
-from flask import Flask, request, jsonify
+from flask import (
+    Flask, render_template, request,
+    redirect, url_for, flash, session
+)
+from flask_sqlalchemy import SQLAlchemy
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
 
-DATABASE = os.environ.get("DATABASE_PATH", "vip_income.db")
-API_KEY = os.environ.get("API_KEY", "")
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "")
-TIMEZONE = ZoneInfo("Asia/Dhaka")
+app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "CHANGE-THIS-SECRET")
+
+database_url = os.environ.get(
+    "DATABASE_URL", "sqlite:///earn_master_bd.db"
+)
+
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace(
+        "postgres://", "postgresql://", 1
+    )
+
+app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
+db = SQLAlchemy(app)
+
+JOIN_BONUS = 2
+MIN_WITHDRAWAL = 100
+REQUIRED_REFERRALS = 3
+
+ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 
-def db_connect():
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    return conn
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(40), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    referral_code = db.Column(db.String(20), unique=True, nullable=False)
+    referred_by = db.Column(db.String(20))
+    balance = db.Column(db.Integer, default=0, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
-def init_db():
-    with db_connect() as conn:
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS users (
-                user_id TEXT PRIMARY KEY,
-                balance INTEGER NOT NULL DEFAULT 0,
-                referred_by TEXT,
-                joined_at TEXT NOT NULL
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS withdrawals (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id TEXT NOT NULL,
-                amount INTEGER NOT NULL,
-                method TEXT NOT NULL,
-                account_number TEXT NOT NULL,
-                status TEXT NOT NULL DEFAULT 'pending',
-                created_at TEXT NOT NULL
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS daily_claims (
-                user_id TEXT NOT NULL,
-                claim_date TEXT NOT NULL,
-                PRIMARY KEY (user_id, claim_date)
-            )
-        """)
+class Withdrawal(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    amount = db.Column(db.Integer, nullable=False)
+    method = db.Column(db.String(20), nullable=False)
+    account_number = db.Column(db.String(40), nullable=False)
+    status = db.Column(db.String(20), default="pending")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship("User", backref="withdrawals")
 
 
-def require_api_key(fn):
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(120), nullable=False)
+    description = db.Column(db.String(500), nullable=False)
+    reward = db.Column(db.Integer, nullable=False)
+    active = db.Column(db.Boolean, default=True)
+
+
+class TaskClaim(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey("task.id"), nullable=False)
+    status = db.Column(db.String(20), default="pending")
+
+    user = db.relationship("User")
+    task = db.relationship("Task")
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id", "task_id", name="unique_user_task"
+        ),
+    )
+
+
+def me():
+    uid = session.get("user_id")
+    return db.session.get(User, uid) if uid else None
+
+
+def login_required(fn):
     @wraps(fn)
-    def wrapper(*args, **kwargs):
-        supplied = request.headers.get("X-API-KEY", "")
-        if not API_KEY or supplied != API_KEY:
-            return jsonify({"ok": False, "error": "Unauthorized"}), 401
+    def wrapped(*args, **kwargs):
+        if not me():
+            return redirect(url_for("login"))
         return fn(*args, **kwargs)
-    return wrapper
+    return wrapped
 
 
-def require_admin_key(fn):
+def admin_required(fn):
     @wraps(fn)
-    def wrapper(*args, **kwargs):
-        supplied = request.headers.get("X-ADMIN-KEY", "")
-        if not ADMIN_KEY or supplied != ADMIN_KEY:
-            return jsonify({"ok": False, "error": "Unauthorized admin"}), 401
+    def wrapped(*args, **kwargs):
+        if not session.get("admin"):
+            return redirect(url_for("admin_login"))
         return fn(*args, **kwargs)
-    return wrapper
+    return wrapped
 
 
-def get_json():
-    return request.get_json(silent=True) or {}
+@app.context_processor
+def common():
+    return {
+        "logged_user": me(),
+        "site_name": "Earn Master BD"
+    }
 
 
-@app.get("/")
+@app.route("/")
 def home():
-    return jsonify({
-        "ok": True,
-        "service": "VIP FREE INCOME BOT API",
-        "message": "Backend is running"
-    })
+    return render_template("home.html")
 
 
-@app.post("/api/start")
-@require_api_key
-def start_user():
-    data = get_json()
-    user_id = str(data.get("user_id", "")).strip()
-    referrer_id = str(data.get("referrer_id", "")).strip()
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip().lower()
+        password = request.form.get("password", "")
+        ref = request.form.get("referral_code", "").strip()
 
-    if not user_id:
-        return jsonify({"ok": False, "error": "user_id is required"}), 400
+        if len(username) < 3 or len(username) > 40 or len(password) < 8:
+            flash("ইউজারনেম ৩ অক্ষর এবং পাসওয়ার্ড ৮ অক্ষরের হতে হবে।", "error")
+            return redirect(url_for("register"))
 
-    now = datetime.now(TIMEZONE).isoformat()
-    with db_connect() as conn:
-        existing = conn.execute(
-            "SELECT user_id, balance FROM users WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
+        if User.query.filter_by(username=username).first():
+            flash("এই ইউজারনেম আগে থেকেই আছে।", "error")
+            return redirect(url_for("register"))
 
-        if existing:
-            return jsonify({
-                "ok": True,
-                "message": "User already exists",
-                "user_id": user_id,
-                "balance": existing["balance"]
-            })
+        parent = User.query.filter_by(
+            referral_code=ref
+        ).first() if ref else None
 
-        valid_referrer = None
-        if referrer_id and referrer_id != user_id:
-            ref = conn.execute(
-                "SELECT user_id FROM users WHERE user_id = ?",
-                (referrer_id,)
-            ).fetchone()
-            if ref:
-                valid_referrer = referrer_id
+        code = secrets.token_urlsafe(8)[:12]
 
-        conn.execute(
-            "INSERT INTO users (user_id, balance, referred_by, joined_at) VALUES (?, ?, ?, ?)",
-            (user_id, 3, valid_referrer, now)
+        while User.query.filter_by(referral_code=code).first():
+            code = secrets.token_urlsafe(8)[:12]
+
+        user = User(
+            username=username,
+            password_hash=generate_password_hash(password),
+            referral_code=code,
+            referred_by=parent.referral_code if parent else None,
+            balance=JOIN_BONUS
         )
 
-        if valid_referrer:
-            conn.execute(
-                "UPDATE users SET balance = balance + 2 WHERE user_id = ?",
-                (valid_referrer,)
-            )
+        db.session.add(user)
+        db.session.commit()
 
-    return jsonify({
-        "ok": True,
-        "message": "Welcome bonus added",
-        "user_id": user_id,
-        "welcome_bonus": 3,
-        "referral_bonus": 2 if valid_referrer else 0,
-        "balance": 3
-    })
+        session["user_id"] = user.id
+
+        flash("অ্যাকাউন্ট তৈরি হয়েছে। ৳২ বোনাস পেয়েছেন।", "success")
+        return redirect(url_for("dashboard"))
+
+    return render_template(
+        "register.html",
+        ref=request.args.get("ref", "")
+    )
 
 
-@app.get("/api/balance")
-@require_api_key
-def balance():
-    user_id = str(request.args.get("user_id", "")).strip()
-    if not user_id:
-        return jsonify({"ok": False, "error": "user_id is required"}), 400
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip().lower()
+        password = request.form.get("password", "")
 
-    with db_connect() as conn:
-        user = conn.execute(
-            "SELECT balance FROM users WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
+        user = User.query.filter_by(username=username).first()
 
-    if not user:
-        return jsonify({"ok": False, "error": "User not found"}), 404
+        if user and check_password_hash(user.password_hash, password):
+            session.clear()
+            session["user_id"] = user.id
+            return redirect(url_for("dashboard"))
 
-    return jsonify({"ok": True, "user_id": user_id, "balance": user["balance"]})
+        flash("লগইন তথ্য সঠিক নয়।", "error")
+
+    return render_template("login.html")
 
 
-@app.post("/api/bonus")
-@require_api_key
-def daily_bonus():
-    data = get_json()
-    user_id = str(data.get("user_id", "")).strip()
-    if not user_id:
-        return jsonify({"ok": False, "error": "user_id is required"}), 400
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("home"))
 
-    today = datetime.now(TIMEZONE).date().isoformat()
-    with db_connect() as conn:
-        user = conn.execute(
-            "SELECT user_id FROM users WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
-        if not user:
-            return jsonify({"ok": False, "error": "User not found"}), 404
 
-        claimed = conn.execute(
-            "SELECT user_id FROM daily_claims WHERE user_id = ? AND claim_date = ?",
-            (user_id, today)
-        ).fetchone()
-        if claimed:
-            return jsonify({"ok": False, "error": "Daily bonus already claimed today"}), 409
+@app.route("/dashboard")
+@login_required
+def dashboard():
+    user = me()
 
-        conn.execute(
-            "INSERT INTO daily_claims (user_id, claim_date) VALUES (?, ?)",
-            (user_id, today)
+    referrals = User.query.filter_by(
+        referred_by=user.referral_code
+    ).count()
+
+    tasks = Task.query.filter_by(active=True).all()
+
+    claims = {
+        c.task_id: c.status
+        for c in TaskClaim.query.filter_by(user_id=user.id).all()
+    }
+
+    return render_template(
+        "dashboard.html",
+        u=user,
+        refs=referrals,
+        tasks=tasks,
+        claims=claims
+    )
+
+
+@app.post("/task/<int:tid>/claim")
+@login_required
+def claim(tid):
+    user = me()
+    task = db.session.get(Task, tid)
+
+    if not task or not task.active:
+        flash("কাজটি পাওয়া যায়নি।", "error")
+
+    elif TaskClaim.query.filter_by(
+        user_id=user.id, task_id=tid
+    ).first():
+        flash("এই কাজের আবেদন আগে হয়েছে।", "error")
+
+    else:
+        db.session.add(
+            TaskClaim(user_id=user.id, task_id=tid)
         )
-        conn.execute(
-            "UPDATE users SET balance = balance + 1 WHERE user_id = ?",
-            (user_id,)
-        )
-        new_balance = conn.execute(
-            "SELECT balance FROM users WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()["balance"]
+        db.session.commit()
 
-    return jsonify({
-        "ok": True,
-        "daily_bonus": 1,
-        "balance": new_balance
-    })
+        flash("আবেদন জমা হয়েছে। অ্যাডমিন যাচাই করবেন।", "success")
+
+    return redirect(url_for("dashboard"))
 
 
-@app.post("/api/withdraw")
-@require_api_key
-def create_withdrawal():
-    data = get_json()
-    user_id = str(data.get("user_id", "")).strip()
-    method = str(data.get("method", "")).strip().lower()
-    account_number = str(data.get("account_number", "")).strip()
+@app.post("/withdraw")
+@login_required
+def withdraw():
+    user = me()
+
+    referrals = User.query.filter_by(
+        referred_by=user.referral_code
+    ).count()
 
     try:
-        amount = int(data.get("amount", 0))
-    except (TypeError, ValueError):
+        amount = int(request.form.get("amount", "0"))
+    except (ValueError, TypeError):
         amount = 0
 
-    if not user_id or not account_number:
-        return jsonify({"ok": False, "error": "user_id and account_number are required"}), 400
-    if amount < 150:
-        return jsonify({"ok": False, "error": "Minimum withdrawal is 150 taka"}), 400
-    if method not in ("bkash", "nagad", "rocket"):
-        return jsonify({"ok": False, "error": "method must be bkash, nagad, or rocket"}), 400
+    method = request.form.get("method", "").lower()
+    account = request.form.get("account_number", "").strip()
 
-    now = datetime.now(TIMEZONE).isoformat()
-    with db_connect() as conn:
-        user = conn.execute(
-            "SELECT balance FROM users WHERE user_id = ?",
-            (user_id,)
-        ).fetchone()
-        if not user:
-            return jsonify({"ok": False, "error": "User not found"}), 404
-        if user["balance"] < amount:
-            return jsonify({"ok": False, "error": "Insufficient balance"}), 400
+    if referrals < REQUIRED_REFERRALS:
+        flash("উত্তোলনের আগে ৩ জন সফল রেফার পূর্ণ করুন।", "error")
 
-        conn.execute(
-            "UPDATE users SET balance = balance - ? WHERE user_id = ?",
-            (amount, user_id)
-        )
-        cur = conn.execute(
-            """INSERT INTO withdrawals
-               (user_id, amount, method, account_number, status, created_at)
-               VALUES (?, ?, ?, ?, 'pending', ?)""",
-            (user_id, amount, method, account_number, now)
-        )
-        withdrawal_id = cur.lastrowid
+    elif amount < MIN_WITHDRAWAL:
+        flash("সর্বনিম্ন উত্তোলন ৳১০০।", "error")
 
-    return jsonify({
-        "ok": True,
-        "message": "Withdrawal request submitted for admin review",
-        "withdrawal_id": withdrawal_id,
-        "status": "pending"
-    })
+    elif amount > user.balance:
+        flash("আপনার ব্যালেন্স যথেষ্ট নয়।", "error")
 
+    elif method not in ("bkash", "nagad", "rocket") or not account:
+        flash("সঠিক পেমেন্ট মাধ্যম ও নম্বর দিন।", "error")
 
-@app.get("/api/admin/withdrawals")
-@require_admin_key
-def list_withdrawals():
-    status = request.args.get("status", "pending")
-    with db_connect() as conn:
-        rows = conn.execute(
-            """SELECT id, user_id, amount, method, account_number, status, created_at
-               FROM withdrawals WHERE status = ? ORDER BY id DESC""",
-            (status,)
-        ).fetchall()
+    else:
+        user.balance -= amount
 
-    return jsonify({"ok": True, "withdrawals": [dict(row) for row in rows]})
-
-
-@app.post("/api/admin/withdrawal")
-@require_admin_key
-def update_withdrawal():
-    data = get_json()
-    try:
-        withdrawal_id = int(data.get("withdrawal_id", 0))
-    except (TypeError, ValueError):
-        withdrawal_id = 0
-
-    action = str(data.get("action", "")).strip().lower()
-    if action not in ("approve", "reject"):
-        return jsonify({"ok": False, "error": "action must be approve or reject"}), 400
-
-    with db_connect() as conn:
-        row = conn.execute(
-            "SELECT id, user_id, amount, status FROM withdrawals WHERE id = ?",
-            (withdrawal_id,)
-        ).fetchone()
-        if not row:
-            return jsonify({"ok": False, "error": "Withdrawal not found"}), 404
-        if row["status"] != "pending":
-            return jsonify({"ok": False, "error": "Withdrawal is not pending"}), 409
-
-        new_status = "approved" if action == "approve" else "rejected"
-        conn.execute(
-            "UPDATE withdrawals SET status = ? WHERE id = ?",
-            (new_status, withdrawal_id)
-        )
-        if action == "reject":
-            conn.execute(
-                "UPDATE users SET balance = balance + ? WHERE user_id = ?",
-                (row["amount"], row["user_id"])
+        db.session.add(
+            Withdrawal(
+                user_id=user.id,
+                amount=amount,
+                method=method,
+                account_number=account
             )
+        )
 
-    return jsonify({
-        "ok": True,
-        "withdrawal_id": withdrawal_id,
-        "status": new_status,
-        "refunded": row["amount"] if action == "reject" else 0
-    })
+        db.session.commit()
+        flash("উত্তোলনের আবেদন জমা হয়েছে।", "success")
+
+    return redirect(url_for("dashboard"))
 
 
-init_db()
+@app.route("/admin/login", methods=["GET", "POST"])
+def admin_login():
+    if request.method == "POST":
+        username = request.form.get("username", "")
+        password = request.form.get("password", "")
+
+        if ADMIN_PASSWORD and username == ADMIN_USERNAME and secrets.compare_digest(
+            password, ADMIN_PASSWORD
+        ):
+            session.clear()
+            session["admin"] = True
+            return redirect(url_for("admin"))
+
+        flash("অ্যাডমিন লগইন ব্যর্থ।", "error")
+
+    return render_template("admin_login.html")
+
+
+@app.route("/admin/logout")
+def admin_logout():
+    session.pop("admin", None)
+    return redirect(url_for("admin_login"))
+
+
+@app.route("/admin")
+@admin_required
+def admin():
+    return render_template(
+        "admin.html",
+        users=User.query.order_by(User.id.desc()).limit(200).all(),
+        withdrawals=Withdrawal.query.filter_by(status="pending").all(),
+        claims=TaskClaim.query.filter_by(status="pending").all()
+    )
+
+
+@app.post("/admin/withdraw/<int:wid>/<action>")
+@admin_required
+def admin_withdraw(wid, action):
+    item = db.session.get(Withdrawal, wid)
+
+    if item and item.status == "pending" and action in ("approve", "reject"):
+        item.status = action
+
+        if action == "reject":
+            item.user.balance += item.amount
+
+        db.session.commit()
+
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/claim/<int:cid>/<action>")
+@admin_required
+def admin_claim(cid, action):
+    claim = db.session.get(TaskClaim, cid)
+
+    if claim and claim.status == "pending" and action in ("approve", "reject"):
+        claim.status = action
+
+        if action == "approve":
+            claim.user.balance += claim.task.reward
+
+        db.session.commit()
+
+    return redirect(url_for("admin"))
+
+
+@app.post("/admin/task")
+@admin_required
+def add_task():
+    title = request.form.get("title", "").strip()
+    description = request.form.get("description", "").strip()
+
+    try:
+        reward = int(request.form.get("reward", "0"))
+    except (ValueError, TypeError):
+        reward = 0
+
+    if title and description and 1 <= reward <= 1000:
+        db.session.add(
+            Task(
+                title=title,
+                description=description,
+                reward=reward
+            )
+        )
+        db.session.commit()
+        flash("নতুন কাজ যোগ হয়েছে।", "success")
+    else:
+        flash("সঠিক কাজের তথ্য দিন।", "error")
+
+    return redirect(url_for("admin"))
+
+
+@app.get("/health")
+def health():
+    return {"ok": True, "service": "Earn Master BD"}
+
+
+with app.app_context():
+    db.create_all()
+
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )

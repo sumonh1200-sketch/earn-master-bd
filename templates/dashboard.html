@@ -47,7 +47,7 @@
 
         .balance h1 { font-size: 34px; }
 
-        input, select, textarea {
+        input, select {
             width: 100%;
             padding: 12px;
             margin: 7px 0;
@@ -71,9 +71,33 @@
             text-decoration: none;
         }
 
-        .task {
+        .task, .history-item {
             border-bottom: 1px solid #ddd;
             padding: 12px 0;
+        }
+
+        .history-item:last-child {
+            border-bottom: none;
+        }
+
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 13px;
+            background: #eee;
+        }
+
+        .pending { background: #fff0c2; color: #805b00; }
+        .approved { background: #d9f8e5; color: #08783c; }
+        .rejected { background: #ffe0e0; color: #b00020; }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin: 10px 0;
+            background: #e1f5e8;
+            color: #176b35;
         }
 
         a { color: #0875d1; }
@@ -89,6 +113,12 @@
 </header>
 
 <div class="container">
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+            <div class="message">{{ message }}</div>
+        {% endfor %}
+    {% endwith %}
 
     <div class="card">
         <h3>স্বাগতম, {{ user.username }}!</h3>
@@ -121,9 +151,17 @@
                 <p>{{ task.description }}</p>
                 <p>পুরস্কার: ৳{{ task.reward }}</p>
 
-                <form method="POST" action="/task/{{ task.id }}/claim">
-                    <button type="submit">কাজ জমা দিন</button>
-                </form>
+                {% if claims.get(task.id) %}
+                    <p>আবেদনের অবস্থা:
+                        <span class="status {{ claims.get(task.id) }}">
+                            {{ claims.get(task.id) }}
+                        </span>
+                    </p>
+                {% else %}
+                    <form method="POST" action="/task/{{ task.id }}/claim">
+                        <button type="submit">কাজ জমা দিন</button>
+                    </form>
+                {% endif %}
             </div>
         {% else %}
             <p>এখনো কোনো কাজ প্রকাশ করা হয়নি।</p>
@@ -137,7 +175,7 @@
         <form method="POST" action="/withdraw">
             <label>টাকার পরিমাণ</label>
             <input type="number" name="amount" min="100"
-                   step="0.01" placeholder="টাকার পরিমাণ লিখুন" required>
+                   step="1" placeholder="টাকার পরিমাণ লিখুন" required>
 
             <label>পেমেন্ট মাধ্যম</label>
             <select name="method" required>
@@ -153,6 +191,33 @@
 
             <button type="submit">উইথড্র আবেদন করুন</button>
         </form>
+    </div>
+
+    <div class="card">
+        <h3>📜 উইথড্র হিস্টোরি</h3>
+
+        {% for item in user.withdrawals|sort(attribute='created_at', reverse=true) %}
+            <div class="history-item">
+                <h4>উত্তোলন: ৳{{ item.amount }}</h4>
+                <p>মাধ্যম: {{ item.method|upper }}</p>
+                <p>অ্যাকাউন্ট: {{ item.account_number }}</p>
+                <p>তারিখ: {{ item.created_at.strftime('%d-%m-%Y %I:%M %p') }}</p>
+
+                <p>অবস্থা:
+                    {% if item.status == 'pending' %}
+                        <span class="status pending">অপেক্ষমাণ</span>
+                    {% elif item.status == 'approved' %}
+                        <span class="status approved">অনুমোদিত</span>
+                    {% elif item.status == 'rejected' %}
+                        <span class="status rejected">বাতিল</span>
+                    {% else %}
+                        <span class="status">{{ item.status }}</span>
+                    {% endif %}
+                </p>
+            </div>
+        {% else %}
+            <p>এখনো কোনো উইথড্র আবেদন নেই।</p>
+        {% endfor %}
     </div>
 
 </div>

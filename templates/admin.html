@@ -3,71 +3,180 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Admin Panel - Earn Master BD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - Earn Master BD</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: #eef3f9;
+            font-family: Arial, sans-serif;
+            color: #17233b;
+        }
+
+        header {
+            background: #101d3b;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header a {
+            color: white;
+            text-decoration: none;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: auto;
+            padding: 15px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px #00000012;
+            overflow-wrap: anywhere;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 7px 0;
+            border: 1px solid #ccd5e0;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 10px 15px;
+            margin: 5px 3px;
+            border: none;
+            border-radius: 7px;
+            background: #0875d1;
+            color: white;
+            font-weight: bold;
+        }
+
+        .reject {
+            background: #d93030;
+        }
+
+        h2 { color: #0755a5; }
+
+        .item {
+            padding: 12px 0;
+            border-bottom: 1px solid #ddd;
+        }
+    </style>
 </head>
+
 <body>
-    <h1>Earn Master BD - Admin Panel</h1>
 
-    <p><a href="/logout">লগআউট</a></p>
+<header>
+    <h1>Earn Master BD</h1>
+    <h3>ADMIN DASHBOARD</h3>
+    <a href="/logout">লগআউট</a>
+</header>
 
-    <h2>নতুন কাজ যোগ করুন</h2>
-    <form method="POST" action="/admin/task">
-        <input name="title" placeholder="কাজের নাম" required>
-        <br><br>
-        <textarea name="description" placeholder="কাজের বিবরণ"></textarea>
-        <br><br>
-        <input name="reward" type="number" step="0.01" min="0" placeholder="পুরস্কার" required>
-        <br><br>
-        <button type="submit">কাজ যোগ করুন</button>
-    </form>
+<div class="container">
 
-    <hr>
-    <h2>সাম্প্রতিক ব্যবহারকারী</h2>
-    {% for user in users %}
-        <p>{{ user.username }} | ব্যালেন্স: ৳{{ user.balance }} | রেফার কোড: {{ user.referral_code }}</p>
-    {% else %}
-        <p>কোনো ব্যবহারকারী নেই।</p>
-    {% endfor %}
+    <div class="card">
+        <h2>➕ নতুন কাজ যোগ করুন</h2>
 
-    <hr>
-    <h2>উইথড্র আবেদন</h2>
-    {% for item in withdrawals %}
-        <p>
-            {{ item.user.username }} |
-            ৳{{ item.amount }} |
-            {{ item.method }} |
-            {{ item.account }} |
-            {{ item.status }}
-        </p>
-        {% if item.status == "pending" %}
-            <form method="POST" action="/admin/withdraw/{{ item.id }}">
-                <button name="action" value="approve">অনুমোদন</button>
-                <button name="action" value="reject">বাতিল</button>
-            </form>
-        {% endif %}
-        <hr>
-    {% else %}
-        <p>কোনো আবেদন নেই।</p>
-    {% endfor %}
+        <form method="POST" action="/admin/task">
+            <input type="text" name="title"
+                   placeholder="কাজের নাম" required>
 
-    <h2>কাজের আবেদন</h2>
-    {% for claim in claims %}
-        <p>
-            {{ claim.user.username }} |
-            {{ claim.task.title }} |
-            ৳{{ claim.task.reward }} |
-            {{ claim.status }}
-        </p>
-        {% if claim.status == "pending" %}
-            <form method="POST" action="/admin/claim/{{ claim.id }}">
-                <button name="action" value="approve">অনুমোদন</button>
-                <button name="action" value="reject">বাতিল</button>
-            </form>
-        {% endif %}
-        <hr>
-    {% else %}
-        <p>কোনো কাজের আবেদন নেই।</p>
-    {% endfor %}
+            <textarea name="description"
+                      placeholder="কাজের বিবরণ"></textarea>
+
+            <input type="number" name="reward"
+                   step="0.01" min="0"
+                   placeholder="কাজের পুরস্কার" required>
+
+            <button type="submit">কাজ যোগ করুন</button>
+        </form>
+    </div>
+
+    <div class="card">
+        <h2>👥 ব্যবহারকারীদের তালিকা</h2>
+
+        {% for user in users %}
+            <div class="item">
+                <b>{{ user.username }}</b>
+                <p>ব্যালেন্স: ৳{{ user.balance }}</p>
+                <p>রেফার কোড: {{ user.referral_code }}</p>
+            </div>
+        {% else %}
+            <p>কোনো ব্যবহারকারী নেই।</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h2>💳 উইথড্র আবেদন</h2>
+
+        {% for item in withdrawals %}
+            <div class="item">
+                <b>ইউজার:</b> {{ item.user.username }}
+                <p>পরিমাণ: ৳{{ item.amount }}</p>
+                <p>মাধ্যম: {{ item.method }}</p>
+                <p>নম্বর: {{ item.account }}</p>
+                <p>অবস্থা: {{ item.status }}</p>
+
+                {% if item.status == "pending" %}
+                    <form method="POST"
+                          action="/admin/withdraw/{{ item.id }}">
+                        <button name="action" value="approve">
+                            অনুমোদন
+                        </button>
+
+                        <button class="reject"
+                                name="action" value="reject">
+                            বাতিল
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        {% else %}
+            <p>কোনো উইথড্র আবেদন নেই।</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h2>📋 কাজের আবেদন</h2>
+
+        {% for claim in claims %}
+            <div class="item">
+                <b>ইউজার:</b> {{ claim.user.username }}
+                <p>কাজ: {{ claim.task.title }}</p>
+                <p>পুরস্কার: ৳{{ claim.task.reward }}</p>
+                <p>অবস্থা: {{ claim.status }}</p>
+
+                {% if claim.status == "pending" %}
+                    <form method="POST"
+                          action="/admin/claim/{{ claim.id }}">
+                        <button name="action" value="approve">
+                            অনুমোদন
+                        </button>
+
+                        <button class="reject"
+                                name="action" value="reject">
+                            বাতিল
+                        </button>
+                    </form>
+                {% endif %}
+            </div>
+        {% else %}
+            <p>কোনো কাজের আবেদন নেই।</p>
+        {% endfor %}
+    </div>
+
+</div>
+
 </body>
 </html>

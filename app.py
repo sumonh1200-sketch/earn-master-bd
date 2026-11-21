@@ -124,7 +124,7 @@ def register():
     if request.method == "POST":
         username = request.form.get("username", "").strip().lower()
         password = request.form.get("password", "")
-        ref = request.form.get("referral_code", "").strip()
+        ref = request.form.get("referral", "").strip()
 
         if len(username) < 3 or len(username) > 40 or len(password) < 8:
             flash("ইউজারনেম ৩ অক্ষর এবং পাসওয়ার্ড ৮ অক্ষরের হতে হবে।", "error")

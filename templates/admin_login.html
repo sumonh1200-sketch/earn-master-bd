@@ -3,24 +3,103 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Login - Earn Master BD</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #101d3b, #0875d1);
+        }
+
+        .box {
+            background: white;
+            width: 100%;
+            max-width: 400px;
+            padding: 28px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px #0003;
+        }
+
+        h1 {
+            text-align: center;
+            color: #0755a5;
+        }
+
+        p {
+            text-align: center;
+            color: #555;
+        }
+
+        label {
+            display: block;
+            margin: 15px 0 7px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 13px;
+            border: 1px solid #ccd5e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 22px;
+            border: none;
+            border-radius: 8px;
+            background: #0755a5;
+            color: white;
+            font-size: 17px;
+            font-weight: bold;
+        }
+
+        a {
+            color: #0875d1;
+            text-decoration: none;
+        }
+
+        .message {
+            color: #c0392b;
+        }
+    </style>
 </head>
+
 <body>
-    <h2>অ্যাডমিন লগইন</h2>
+    <div class="box">
+        <h1>ADMIN PANEL</h1>
+        <p>Earn Master BD</p>
 
-    {% with messages = get_flashed_messages() %}
-      {% for message in messages %}
-        <p>{{ message }}</p>
-      {% endfor %}
-    {% endwith %}
+        {% with messages = get_flashed_messages() %}
+            {% for message in messages %}
+                <p class="message">{{ message }}</p>
+            {% endfor %}
+        {% endwith %}
 
-    <form method="POST">
-        <input name="username" placeholder="Admin username" required>
-        <br><br>
-        <input name="password" type="password" placeholder="Admin password" required>
-        <br><br>
-        <button type="submit">লগইন</button>
-    </form>
+        <form method="POST">
+            <label>Admin Username</label>
+            <input type="text" name="username"
+                   placeholder="Admin username" required>
+
+            <label>Admin Password</label>
+            <input type="password" name="password"
+                   placeholder="Admin password" required>
+
+            <button type="submit">Admin Login</button>
+        </form>
+
+        <p><a href="/">হোম পেজে ফিরে যান</a></p>
+    </div>
 </body>
 </html>

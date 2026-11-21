@@ -1,6 +1,7 @@
 
 import os
 import secrets
+from decimal import Decimal, InvalidOperation
 from datetime import datetime
 from functools import wraps
 
@@ -9,6 +10,7 @@ from flask import (
     url_for, flash, session
 )
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import text
 from werkzeug.security import generate_password_hash, check_password_hash
 
 
@@ -33,12 +35,44 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 db = SQLAlchemy(app)
 
-JOIN_BONUS = 2
-MIN_WITHDRAWAL = 100
+# সব টাকা পয়সায় সংরক্ষণ হবে।
+JOIN_BONUS = 200
+REFERRAL_BONUS = 200
+MIN_WITHDRAWAL = 10000
 REQUIRED_REFERRALS = 3
+
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 PAYMENT_METHODS = ["bkash", "nagad", "rocket"]
+
+
+# =========================
+# MONEY HELPERS
+# =========================
+
+def to_paisa(value):
+    try:
+        amount = Decimal(str(value).strip())
+
+        if not amount.is_finite() or amount <= 0:
+            return None
+
+        if amount.as_tuple().exponent < -2:
+            return None
+
+        return int(amount * 100)
+
+    except (InvalidOperation, ValueError, TypeError):
+        return None
+
+
+@app.template_filter("money")
+def money_filter(value):
+    try:
+        amount = Decimal(str(value or 0)) / Decimal("100")
+        return f"{amount:,.2f}"
+    except (InvalidOperation, ValueError, TypeError):
+        return "0.00"
 
 
 # =========================
@@ -90,7 +124,10 @@ class TaskClaim(db.Model):
     task = db.relationship("Task", backref="claims")
 
     __table_args__ = (
-        db.UniqueConstraint("user_id", "task_id", name="unique_user_task_claim"),
+        db.UniqueConstraint(
+            "user_id", "task_id",
+            name="unique_user_task_claim"
+        ),
     )
 
 
@@ -106,14 +143,49 @@ class BalanceTransaction(db.Model):
     user = db.relationship("User", backref="balance_transactions")
 
 
+class MoneyMigration(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    version = db.Column(db.String(50), unique=True, nullable=False)
+
+
+# =========================
+# OLD MONEY DATA MIGRATION
+# =========================
+
+def migrate_old_money_to_paisa():
+    version = "money_to_paisa_v1"
+
+    if MoneyMigration.query.filter_by(version=version).first():
+        return
+
+    # পুরোনো টাকার পরিমাণকে পয়সায় রূপান্তর।
+    db.session.execute(
+        text("UPDATE \"user\" SET balance = balance * 100")
+    )
+    db.session.execute(
+        text("UPDATE withdrawal SET amount = amount * 100")
+    )
+    db.session.execute(
+        text("UPDATE task SET reward = reward * 100")
+    )
+    db.session.execute(
+        text("UPDATE balance_transaction SET amount = amount * 100")
+    )
+
+    db.session.add(MoneyMigration(version=version))
+    db.session.commit()
+
+
 # =========================
 # LOGIN HELPERS
 # =========================
 
 def current_user():
     user_id = session.get("user_id")
+
     if not user_id:
         return None
+
     return db.session.get(User, user_id)
 
 
@@ -122,7 +194,9 @@ def login_required(function):
     def wrapper(*args, **kwargs):
         if not current_user():
             return redirect(url_for("login"))
+
         return function(*args, **kwargs)
+
     return wrapper
 
 
@@ -131,7 +205,9 @@ def admin_required(function):
     def wrapper(*args, **kwargs):
         if not session.get("is_admin"):
             return redirect(url_for("admin_login"))
+
         return function(*args, **kwargs)
+
     return wrapper
 
 
@@ -143,8 +219,8 @@ def admin_required(function):
 def home():
     return render_template(
         "home.html",
-        join_bonus=JOIN_BONUS,
-        min_withdrawal=MIN_WITHDRAWAL,
+        join_bonus=Decimal("2.00"),
+        min_withdrawal=Decimal("100.00"),
         required_referrals=REQUIRED_REFERRALS
     )
 
@@ -173,6 +249,7 @@ def register():
             return redirect(url_for("register"))
 
         referrer = None
+
         if referral:
             referrer = User.query.filter_by(
                 referral_code=referral
@@ -193,14 +270,17 @@ def register():
         db.session.add(new_user)
 
         if referrer:
-            referrer.balance += 2
+            referrer.balance += REFERRAL_BONUS
 
         db.session.commit()
 
         flash("রেজিস্ট্রেশন সফল হয়েছে। এখন লগইন করুন।", "success")
         return redirect(url_for("login"))
 
-    return render_template("register.html", ref=request.args.get("ref", ""))
+    return render_template(
+        "register.html",
+        ref=request.args.get("ref", "")
+    )
 
 
 # =========================
@@ -280,7 +360,8 @@ def claim_task(task_id):
         return redirect(url_for("dashboard"))
 
     existing = TaskClaim.query.filter_by(
-        user_id=user.id, task_id=task.id
+        user_id=user.id,
+        task_id=task.id
     ).first()
 
     if existing:
@@ -292,6 +373,7 @@ def claim_task(task_id):
         task_id=task.id,
         status="pending"
     ))
+
     db.session.commit()
 
     flash("টাস্ক জমা হয়েছে। অ্যাডমিন যাচাই করবেন।", "success")
@@ -306,12 +388,7 @@ def claim_task(task_id):
 @login_required
 def withdraw():
     user = current_user()
-
-    try:
-        amount = int(request.form.get("amount", "0"))
-    except ValueError:
-        flash("সঠিক টাকার পরিমাণ লিখুন।", "error")
-        return redirect(url_for("dashboard"))
+    amount = to_paisa(request.form.get("amount", ""))
 
     method = request.form.get("method", "").lower().strip()
     account = request.form.get("account", "").strip()
@@ -320,7 +397,9 @@ def withdraw():
         referred_by=user.referral_code
     ).count()
 
-    if amount < MIN_WITHDRAWAL:
+    if amount is None:
+        flash("সঠিক টাকার পরিমাণ লিখুন। যেমন 100.50", "error")
+    elif amount < MIN_WITHDRAWAL:
         flash("সর্বনিম্ন উত্তোলন ১০০ টাকা।", "error")
     elif referral_count < REQUIRED_REFERRALS:
         flash("উত্তোলনের আগে ৩ জন সফল রেফারেল লাগবে।", "error")
@@ -419,13 +498,13 @@ def admin_add_task():
     title = request.form.get("title", "").strip()
     description = request.form.get("description", "").strip()
 
-    try:
-        reward = int(request.form.get("reward", "0"))
-    except ValueError:
-        reward = 0
+    reward = to_paisa(request.form.get("reward", ""))
 
-    if not title or reward <= 0:
-        flash("টাস্কের নাম ও সঠিক পুরস্কার লিখুন।", "error")
+    if not title or reward is None:
+        flash(
+            "টাস্কের নাম ও সঠিক পুরস্কার লিখুন। যেমন 0.50",
+            "error"
+        )
         return redirect(url_for("admin"))
 
     db.session.add(Task(
@@ -436,12 +515,13 @@ def admin_add_task():
     ))
 
     db.session.commit()
+
     flash("নতুন টাস্ক যোগ হয়েছে।", "success")
     return redirect(url_for("admin"))
 
 
 # =========================
-# ADMIN: ADD / REMOVE USER BALANCE
+# ADMIN: ADD / REMOVE BALANCE
 # =========================
 
 @app.route("/admin/balance", methods=["POST"])
@@ -449,11 +529,10 @@ def admin_add_task():
 def admin_balance():
     try:
         user_id = int(request.form.get("user_id", "0"))
-        amount = int(request.form.get("amount", "0"))
     except ValueError:
-        flash("ইউজার আইডি ও টাকার পরিমাণ সঠিক হতে হবে।", "error")
-        return redirect(url_for("admin"))
+        user_id = 0
 
+    amount = to_paisa(request.form.get("amount", ""))
     action = request.form.get("action", "").strip()
     reason = request.form.get("reason", "").strip()
 
@@ -461,14 +540,19 @@ def admin_balance():
 
     if not user:
         flash("ইউজার পাওয়া যায়নি।", "error")
-    elif amount <= 0:
-        flash("টাকার পরিমাণ শূন্যের বেশি হতে হবে।", "error")
+
+    elif amount is None:
+        flash("সঠিক টাকার পরিমাণ লিখুন। যেমন 0.50", "error")
+
     elif action not in ["add", "remove"]:
         flash("সঠিক অ্যাকশন নির্বাচন করুন।", "error")
+
     elif not reason:
         flash("ব্যালেন্স পরিবর্তনের কারণ লিখুন।", "error")
+
     elif action == "remove" and amount > user.balance:
         flash("ইউজারের ব্যালেন্সের চেয়ে বেশি কমানো যাবে না।", "error")
+
     else:
         if action == "add":
             user.balance += amount
@@ -484,6 +568,7 @@ def admin_balance():
         ))
 
         db.session.commit()
+
         flash("ইউজারের ব্যালেন্স সফলভাবে আপডেট হয়েছে।", "success")
 
     return redirect(url_for("admin"))
@@ -506,9 +591,11 @@ def admin_withdraw(wid):
 
     if withdrawal.status != "pending":
         flash("এই আবেদনটি আগেই প্রক্রিয়া করা হয়েছে।", "error")
+
     elif action == "approve":
         withdrawal.status = "approved"
         flash("উইথড্র অনুমোদন করা হয়েছে।", "success")
+
     elif action == "reject":
         withdrawal.status = "rejected"
         withdrawal.user.balance += withdrawal.amount
@@ -535,10 +622,12 @@ def admin_claim(cid):
 
     if claim.status != "pending":
         flash("এই আবেদনটি আগেই যাচাই করা হয়েছে।", "error")
+
     elif action == "approve":
         claim.status = "approved"
         claim.user.balance += claim.task.reward
         flash("টাস্ক অনুমোদন হয়েছে এবং পুরস্কার যোগ হয়েছে।", "success")
+
     elif action == "reject":
         claim.status = "rejected"
         flash("টাস্ক আবেদন বাতিল হয়েছে।", "success")
@@ -557,11 +646,18 @@ def health():
 
 
 # =========================
-# CREATE DATABASE TABLES
+# CREATE TABLES AND MIGRATE
 # =========================
 
 with app.app_context():
     db.create_all()
+
+    try:
+        migrate_old_money_to_paisa()
+    except Exception:
+        db.session.rollback()
+        app.logger.exception("Money migration failed")
+        raise
 
 
 if __name__ == "__main__":

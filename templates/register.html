@@ -3,28 +3,99 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>রেজিস্ট্রেশন - Earn Master BD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Earn Master BD</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #0755a5, #08a6d8);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .box {
+            background: white;
+            width: 100%;
+            max-width: 420px;
+            padding: 28px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px #0003;
+        }
+
+        h1 {
+            text-align: center;
+            color: #0755a5;
+        }
+
+        p { text-align: center; color: #555; }
+
+        label {
+            display: block;
+            margin: 14px 0 6px;
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+            padding: 13px;
+            border: 1px solid #ccd5e0;
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        button {
+            width: 100%;
+            padding: 14px;
+            margin-top: 22px;
+            border: none;
+            border-radius: 8px;
+            background: #0875d1;
+            color: white;
+            font-size: 17px;
+            font-weight: bold;
+        }
+
+        a { color: #0875d1; text-decoration: none; }
+        .message { color: #c0392b; }
+    </style>
 </head>
+
 <body>
-    <h2>নতুন অ্যাকাউন্ট খুলুন</h2>
+    <div class="box">
+        <h1>Earn Master BD</h1>
+        <p>নতুন অ্যাকাউন্ট তৈরি করুন</p>
 
-    {% with messages = get_flashed_messages() %}
-      {% for message in messages %}
-        <p>{{ message }}</p>
-      {% endfor %}
-    {% endwith %}
+        {% with messages = get_flashed_messages() %}
+            {% for message in messages %}
+                <p class="message">{{ message }}</p>
+            {% endfor %}
+        {% endwith %}
 
-    <form method="POST">
-        <input name="username" placeholder="আপনার নাম" required>
-        <br><br>
-        <input name="password" type="password" placeholder="পাসওয়ার্ড" required>
-        <br><br>
-        <input name="referral" placeholder="রেফার কোড (ঐচ্ছিক)">
-        <br><br>
-        <button type="submit">রেজিস্ট্রেশন করুন</button>
-    </form>
+        <form method="POST">
+            <label>ইউজারনেম</label>
+            <input type="text" name="username"
+                   placeholder="আপনার ইউজারনেম লিখুন" required>
 
-    <p><a href="/login">আগে অ্যাকাউন্ট আছে? লগইন</a></p>
+            <label>পাসওয়ার্ড</label>
+            <input type="password" name="password"
+                   placeholder="পাসওয়ার্ড লিখুন" required>
+
+            <label>রেফার কোড (ঐচ্ছিক)</label>
+            <input type="text" name="referral"
+                   placeholder="রেফার কোড থাকলে লিখুন">
+
+            <button type="submit">অ্যাকাউন্ট তৈরি করুন</button>
+        </form>
+
+        <p>আগে অ্যাকাউন্ট আছে? <a href="/login">লগইন করুন</a></p>
+        <p><a href="/">হোম পেজে ফিরে যান</a></p>
+    </div>
 </body>
 </html>

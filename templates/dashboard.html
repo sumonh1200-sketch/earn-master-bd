@@ -3,49 +3,159 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ড্যাশবোর্ড - Earn Master BD</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - Earn Master BD</title>
+
+    <style>
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            background: #eef3f9;
+            font-family: Arial, sans-serif;
+            color: #17233b;
+        }
+
+        header {
+            background: #0755a5;
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        header h2 { margin: 0; }
+
+        .container {
+            max-width: 700px;
+            margin: auto;
+            padding: 15px;
+        }
+
+        .card {
+            background: white;
+            padding: 20px;
+            margin: 15px 0;
+            border-radius: 13px;
+            box-shadow: 0 3px 12px #00000012;
+        }
+
+        .balance {
+            background: linear-gradient(135deg, #0755a5, #08a6d8);
+            color: white;
+            text-align: center;
+        }
+
+        .balance h1 { font-size: 34px; }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            margin: 7px 0;
+            border: 1px solid #ccd5e0;
+            border-radius: 8px;
+            font-size: 15px;
+        }
+
+        button {
+            background: #0875d1;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 18px;
+            font-size: 15px;
+            cursor: pointer;
+        }
+
+        .logout {
+            color: white;
+            text-decoration: none;
+        }
+
+        .task {
+            border-bottom: 1px solid #ddd;
+            padding: 12px 0;
+        }
+
+        a { color: #0875d1; }
+    </style>
 </head>
+
 <body>
-    <h2>স্বাগতম, {{ user.username }}!</h2>
 
-    <h3>আপনার ব্যালেন্স: ৳{{ user.balance }}</h3>
-    <p>আপনার রেফার কোড: <b>{{ user.referral_code }}</b></p>
-    <p>রেফার লিংক: {{ referral_url }}</p>
-    <p>সফল রেফার: {{ referral_count }}</p>
+<header>
+    <h2>Earn Master BD</h2>
+    <p>আপনার ড্যাশবোর্ড</p>
+    <a class="logout" href="/logout">লগআউট</a>
+</header>
 
-    <hr>
-    <h3>কাজের তালিকা</h3>
-    {% for task in tasks %}
-        <div>
-            <h4>{{ task.title }}</h4>
-            <p>{{ task.description }}</p>
-            <p>পুরস্কার: ৳{{ task.reward }}</p>
-            <form method="POST" action="/task/{{ task.id }}/claim">
-                <button type="submit">কাজ জমা দিন</button>
-            </form>
-        </div>
-        <hr>
-    {% else %}
-        <p>এখনো কোনো কাজ নেই।</p>
-    {% endfor %}
+<div class="container">
 
-    <h3>উইথড্র করুন</h3>
-    <form method="POST" action="/withdraw">
-        <input type="number" name="amount" min="100" step="0.01" placeholder="টাকার পরিমাণ" required>
-        <br><br>
-        <select name="method" required>
-            <option value="">পেমেন্ট মাধ্যম</option>
-            <option value="bkash">বিকাশ</option>
-            <option value="nagad">নগদ</option>
-            <option value="rocket">রকেট</option>
-        </select>
-        <br><br>
-        <input name="account" placeholder="আপনার পেমেন্ট নম্বর" required>
-        <br><br>
-        <button type="submit">উইথড্র আবেদন</button>
-    </form>
+    <div class="card">
+        <h3>স্বাগতম, {{ user.username }}!</h3>
+        <p>আপনার অ্যাকাউন্টের তথ্য এখানে দেখুন।</p>
+    </div>
 
-    <p><a href="/logout">লগআউট</a></p>
+    <div class="card balance">
+        <p>আপনার বর্তমান ব্যালেন্স</p>
+        <h1>৳{{ user.balance }}</h1>
+    </div>
+
+    <div class="card">
+        <h3>👥 রেফার সিস্টেম</h3>
+        <p>আপনার রেফার কোড:</p>
+        <h3>{{ user.referral_code }}</h3>
+
+        <p>আপনার রেফার লিংক:</p>
+        <input type="text" value="{{ referral_url }}" readonly>
+
+        <p>সফল রেফার: {{ referral_count }}</p>
+        <p>উইথড্র করতে কমপক্ষে ৩টি সফল রেফার প্রয়োজন।</p>
+    </div>
+
+    <div class="card">
+        <h3>💼 কাজের তালিকা</h3>
+
+        {% for task in tasks %}
+            <div class="task">
+                <h4>{{ task.title }}</h4>
+                <p>{{ task.description }}</p>
+                <p>পুরস্কার: ৳{{ task.reward }}</p>
+
+                <form method="POST" action="/task/{{ task.id }}/claim">
+                    <button type="submit">কাজ জমা দিন</button>
+                </form>
+            </div>
+        {% else %}
+            <p>এখনো কোনো কাজ প্রকাশ করা হয়নি।</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h3>💳 টাকা উত্তোলন</h3>
+        <p>ন্যূনতম উত্তোলন: ৳১০০</p>
+
+        <form method="POST" action="/withdraw">
+            <label>টাকার পরিমাণ</label>
+            <input type="number" name="amount" min="100"
+                   step="0.01" placeholder="টাকার পরিমাণ লিখুন" required>
+
+            <label>পেমেন্ট মাধ্যম</label>
+            <select name="method" required>
+                <option value="">নির্বাচন করুন</option>
+                <option value="bkash">বিকাশ</option>
+                <option value="nagad">নগদ</option>
+                <option value="rocket">রকেট</option>
+            </select>
+
+            <label>পেমেন্ট নম্বর</label>
+            <input type="text" name="account"
+                   placeholder="আপনার পেমেন্ট নম্বর" required>
+
+            <button type="submit">উইথড্র আবেদন করুন</button>
+        </form>
+    </div>
+
+</div>
+
 </body>
 </html>

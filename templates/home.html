@@ -3,14 +3,144 @@
 <html lang="bn">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Earn Master BD</title>
+    <link rel="stylesheet" href="/static/style.css">
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background: #f0f4fa;
+            color: #17233b;
+        }
+
+        header {
+            background: #0755a5;
+            color: white;
+            padding: 22px 15px;
+            text-align: center;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 27px;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 45px 20px;
+            background: linear-gradient(135deg, #0755a5, #08a6d8);
+            color: white;
+        }
+
+        .hero h2 {
+            font-size: 28px;
+            margin-bottom: 12px;
+        }
+
+        .hero p {
+            line-height: 1.7;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 13px 22px;
+            margin: 8px 5px;
+            border-radius: 8px;
+            background: #ffcf33;
+            color: #17233b;
+            text-decoration: none;
+            font-weight: bold;
+        }
+
+        .btn.login {
+            background: white;
+        }
+
+        .container {
+            max-width: 850px;
+            margin: auto;
+            padding: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 22px;
+            margin: 15px 0;
+            border-radius: 12px;
+            box-shadow: 0 3px 12px #00000012;
+            text-align: center;
+        }
+
+        .card h3 {
+            color: #0755a5;
+        }
+
+        footer {
+            background: #17233b;
+            color: white;
+            padding: 20px;
+            text-align: center;
+            margin-top: 30px;
+        }
+    </style>
 </head>
+
 <body>
+
+<header>
     <h1>Earn Master BD</h1>
-    <p>ঘরে বসে কাজ করুন, নিয়ম মেনে আয় করুন।</p>
-    <a href="/register">রেজিস্ট্রেশন</a>
-    <br><br>
-    <a href="/login">লগইন</a>
+    <p>অনলাইনে কাজ করুন, নিয়ম মেনে আয় করুন</p>
+</header>
+
+<section class="hero">
+    <h2>স্বাগতম Earn Master BD-তে</h2>
+    <p>আপনার অ্যাকাউন্ট তৈরি করে উপলব্ধ কাজগুলো শুরু করুন।</p>
+
+    <a class="btn" href="/register">নতুন অ্যাকাউন্ট খুলুন</a>
+    <a class="btn login" href="/login">লগইন করুন</a>
+</section>
+
+<div class="container">
+
+    <div class="card">
+        <h3>🎁 জয়েন বোনাস</h3>
+        <h2>৳২</h2>
+        <p>নতুন অ্যাকাউন্টে ৳২ যোগ হবে।</p>
+    </div>
+
+    <div class="card">
+        <h3>💼 কাজের সুযোগ</h3>
+        <p>ড্যাশবোর্ডে প্রকাশিত কাজ দেখুন এবং নিয়ম অনুযায়ী জমা দিন।</p>
+    </div>
+
+    <div class="card">
+        <h3>👥 রেফার সিস্টেম</h3>
+        <p>বন্ধুদের আমন্ত্রণ করুন এবং সফল রেফার সম্পন্ন করুন।</p>
+    </div>
+
+    <div class="card">
+        <h3>💳 টাকা উত্তোলন</h3>
+        <p>ন্যূনতম উত্তোলন ৳১০০। বিকাশ, নগদ ও রকেটের মাধ্যমে আবেদন করুন।</p>
+        <p>উত্তোলনের জন্য কমপক্ষে ৩টি সফল রেফার প্রয়োজন।</p>
+    </div>
+
+    <div class="card">
+        <h3>🚀 এখনই শুরু করুন</h3>
+        <a class="btn" href="/register">রেজিস্ট্রেশন করুন</a>
+    </div>
+
+</div>
+
+<footer>
+    <p>Earn Master BD</p>
+    <p>সঠিক নিয়ম মেনে কাজ করুন।</p>
+</footer>
+
 </body>
 </html>

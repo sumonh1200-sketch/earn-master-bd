@@ -1,226 +1,123 @@
 
-<!DOCTYPE html>
-<html lang="bn">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard - Earn Master BD</title>
+{% extends "base.html" %}
 
-    <style>
-        * { box-sizing: border-box; }
+{% block content %}
+<h1>আপনার ড্যাশবোর্ড</h1>
 
-        body {
-            margin: 0;
-            background: #eef3f9;
-            font-family: Arial, sans-serif;
-            color: #17233b;
-        }
+<section class="grid">
+    <article>
+        <small>বর্তমান ব্যালেন্স</small>
+        <strong>৳{{ user.balance|money }}</strong>
+    </article>
 
-        header {
-            background: #0755a5;
-            color: white;
-            padding: 20px;
-            text-align: center;
-        }
+    <article>
+        <small>সফল রেফারেল</small>
+        <strong>{{ referral_count }} / 3</strong>
+    </article>
 
-        header h2 { margin: 0; }
+    <article>
+        <small>উত্তোলন</small>
+        <strong>
+            {% if referral_count >= 3 %}
+                চালু
+            {% else %}
+                ৩ রেফারেল প্রয়োজন
+            {% endif %}
+        </strong>
+    </article>
+</section>
 
-        .container {
-            max-width: 700px;
-            margin: auto;
-            padding: 15px;
-        }
-
-        .card {
-            background: white;
-            padding: 20px;
-            margin: 15px 0;
-            border-radius: 13px;
-            box-shadow: 0 3px 12px #00000012;
-        }
-
-        .balance {
-            background: linear-gradient(135deg, #0755a5, #08a6d8);
-            color: white;
-            text-align: center;
-        }
-
-        .balance h1 { font-size: 34px; }
-
-        input, select {
-            width: 100%;
-            padding: 12px;
-            margin: 7px 0;
-            border: 1px solid #ccd5e0;
-            border-radius: 8px;
-            font-size: 15px;
-        }
-
-        button {
-            background: #0875d1;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 12px 18px;
-            font-size: 15px;
-            cursor: pointer;
-        }
-
-        .logout {
-            color: white;
-            text-decoration: none;
-        }
-
-        .task, .history-item {
-            border-bottom: 1px solid #ddd;
-            padding: 12px 0;
-        }
-
-        .history-item:last-child {
-            border-bottom: none;
-        }
-
-        .status {
-            display: inline-block;
-            padding: 5px 10px;
-            border-radius: 6px;
-            font-size: 13px;
-            background: #eee;
-        }
-
-        .pending { background: #fff0c2; color: #805b00; }
-        .approved { background: #d9f8e5; color: #08783c; }
-        .rejected { background: #ffe0e0; color: #b00020; }
-
-        .message {
-            padding: 12px;
-            border-radius: 8px;
-            margin: 10px 0;
-            background: #e1f5e8;
-            color: #176b35;
-        }
-
-        a { color: #0875d1; }
-    </style>
-</head>
-
-<body>
-
-<header>
-    <h2>Earn Master BD</h2>
-    <p>আপনার ড্যাশবোর্ড</p>
-    <a class="logout" href="/logout">লগআউট</a>
-</header>
-
-<div class="container">
-
-    {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}
-            <div class="message">{{ message }}</div>
-        {% endfor %}
-    {% endwith %}
-
-    <div class="card">
-        <h3>স্বাগতম, {{ user.username }}!</h3>
-        <p>আপনার অ্যাকাউন্টের তথ্য এখানে দেখুন।</p>
-    </div>
-
-    <div class="card balance">
-        <p>আপনার বর্তমান ব্যালেন্স</p>
-        <h1>৳{{ user.balance }}</h1>
-    </div>
-
-    <div class="card">
-        <h3>👥 রেফার সিস্টেম</h3>
-        <p>আপনার রেফার কোড:</p>
-        <h3>{{ user.referral_code }}</h3>
-
-        <p>আপনার রেফার লিংক:</p>
-        <input type="text" value="{{ referral_url }}" readonly>
-
-        <p>সফল রেফার: {{ referral_count }}</p>
-        <p>উইথড্র করতে কমপক্ষে ৩টি সফল রেফার প্রয়োজন।</p>
-    </div>
-
-    <div class="card">
-        <h3>💼 কাজের তালিকা</h3>
-
-        {% for task in tasks %}
-            <div class="task">
-                <h4>{{ task.title }}</h4>
-                <p>{{ task.description }}</p>
-                <p>পুরস্কার: ৳{{ task.reward }}</p>
-
-                {% if claims.get(task.id) %}
-                    <p>আবেদনের অবস্থা:
-                        <span class="status {{ claims.get(task.id) }}">
-                            {{ claims.get(task.id) }}
-                        </span>
-                    </p>
-                {% else %}
-                    <form method="POST" action="/task/{{ task.id }}/claim">
-                        <button type="submit">কাজ জমা দিন</button>
-                    </form>
-                {% endif %}
-            </div>
-        {% else %}
-            <p>এখনো কোনো কাজ প্রকাশ করা হয়নি।</p>
-        {% endfor %}
-    </div>
-
-    <div class="card">
-        <h3>💳 টাকা উত্তোলন</h3>
-        <p>ন্যূনতম উত্তোলন: ৳১০০</p>
-
-        <form method="POST" action="/withdraw">
-            <label>টাকার পরিমাণ</label>
-            <input type="number" name="amount" min="100"
-                   step="1" placeholder="টাকার পরিমাণ লিখুন" required>
-
-            <label>পেমেন্ট মাধ্যম</label>
-            <select name="method" required>
-                <option value="">নির্বাচন করুন</option>
-                <option value="bkash">বিকাশ</option>
-                <option value="nagad">নগদ</option>
-                <option value="rocket">রকেট</option>
-            </select>
-
-            <label>পেমেন্ট নম্বর</label>
-            <input type="text" name="account"
-                   placeholder="আপনার পেমেন্ট নম্বর" required>
-
-            <button type="submit">উইথড্র আবেদন করুন</button>
-        </form>
-    </div>
-
-    <div class="card">
-        <h3>📜 উইথড্র হিস্টোরি</h3>
-
-        {% for item in user.withdrawals|sort(attribute='created_at', reverse=true) %}
-            <div class="history-item">
-                <h4>উত্তোলন: ৳{{ item.amount }}</h4>
-                <p>মাধ্যম: {{ item.method|upper }}</p>
-                <p>অ্যাকাউন্ট: {{ item.account_number }}</p>
-                <p>তারিখ: {{ item.created_at.strftime('%d-%m-%Y %I:%M %p') }}</p>
-
-                <p>অবস্থা:
-                    {% if item.status == 'pending' %}
-                        <span class="status pending">অপেক্ষমাণ</span>
-                    {% elif item.status == 'approved' %}
-                        <span class="status approved">অনুমোদিত</span>
-                    {% elif item.status == 'rejected' %}
-                        <span class="status rejected">বাতিল</span>
-                    {% else %}
-                        <span class="status">{{ item.status }}</span>
-                    {% endif %}
-                </p>
-            </div>
-        {% else %}
-            <p>এখনো কোনো উইথড্র আবেদন নেই।</p>
-        {% endfor %}
-    </div>
-
+<div class="panel">
+    <h3>আপনার রেফারেল লিংক</h3>
+    <input readonly value="{{ referral_url }}" onclick="this.select()">
+    <p class="muted">
+        এই লিংক দিয়ে নতুন ইউজার রেজিস্ট্রেশন করলে সফল রেফারেল হিসেবে গণনা হবে।
+    </p>
 </div>
 
-</body>
-</html>
+<div class="panel">
+    <h2>উপলব্ধ কাজ</h2>
+
+    {% for task in tasks %}
+        <div class="task">
+            <div>
+                <b>{{ task.title }}</b>
+                <p>{{ task.description }}</p>
+
+                <small>
+                    পুরস্কার: ৳{{ task.reward|money }}
+                </small>
+
+                {% for claim in claims %}
+                    {% if claim.task_id == task.id %}
+                        <p>অবস্থা: {{ claim.status }}</p>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            {% set already_submitted = namespace(value=false) %}
+            {% for claim in claims %}
+                {% if claim.task_id == task.id %}
+                    {% set already_submitted.value = true %}
+                {% endif %}
+            {% endfor %}
+
+            {% if not already_submitted.value %}
+                <form method="post" action="{{ url_for('submit_task', task_id=task.id) }}">
+                    <input name="proof" placeholder="কাজের প্রমাণ/বিবরণ" required>
+                    <button class="btn small">জমা দিন</button>
+                </form>
+            {% endif %}
+        </div>
+    {% else %}
+        <p>এখনো কোনো কাজ যোগ করা হয়নি।</p>
+    {% endfor %}
+</div>
+
+<div class="panel">
+    <h2>টাকা উত্তোলন</h2>
+
+    {% if referral_count < 3 %}
+        <p class="warning">
+            উত্তোলনের আগে আরও {{ 3 - referral_count }} জন সফল রেফারেল প্রয়োজন।
+        </p>
+    {% else %}
+        <form method="post" action="{{ url_for('withdraw') }}">
+            <label>পরিমাণ (সর্বনিম্ন ৳১০০)</label>
+            <input
+                type="number"
+                name="amount"
+                min="100"
+                step="0.01"
+                max="{{ '%.2f'|format(user.balance / 100) }}"
+                required
+            >
+
+            <label>মাধ্যম</label>
+            <select name="method">
+                <option>bKash</option>
+                <option>Nagad</option>
+                <option>Rocket</option>
+            </select>
+
+            <label>অ্যাকাউন্ট নম্বর</label>
+            <input name="account" required>
+
+            <button class="btn">উত্তোলনের আবেদন</button>
+        </form>
+    {% endif %}
+</div>
+
+<div class="panel">
+    <h3>সাম্প্রতিক উত্তোলন</h3>
+
+    {% for w in withdrawals|default([]) %}
+        <p>
+            ৳{{ w.amount|money }} · {{ w.method }} · {{ w.status }}
+        </p>
+    {% else %}
+        <p>কোনো আবেদন নেই।</p>
+    {% endfor %}
+</div>
+
+{% endblock %}

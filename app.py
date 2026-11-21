@@ -5,23 +5,32 @@ from datetime import datetime
 from functools import wraps
 
 from flask import (
-    Flask, render_template, request,
-    redirect, url_for, flash, session
+    Flask, render_template, request, redirect,
+    url_for, flash, session
 )
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
 
+
+# =========================
+# APP SETTINGS
+# =========================
+
 app = Flask(__name__)
 
-app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "CHANGE-THIS-SECRET")
-
-database_url = os.environ.get(
-    "DATABASE_URL", "sqlite:///earn_master_bd.db"
+app.config["SECRET_KEY"] = os.environ.get(
+    "SECRET_KEY", "change-this-secret-key"
 )
+
+database_url = os.environ.get("DATABASE_URL", "sqlite:///earn_master.db")
 
 if database_url.startswith("postgres://"):
     database_url = database_url.replace(
-        "postgres://", "postgresql://", 1
+        "postgres://", "postgresql+psycopg://", 1
+    )
+elif database_url.startswith("postgresql://"):
+    database_url = database_url.replace(
+        "postgresql://", "postgresql+psycopg://", 1
     )
 
 app.config["SQLALCHEMY_DATABASE_URI"] = database_url
@@ -36,128 +45,165 @@ REQUIRED_REFERRALS = 3
 ADMIN_USERNAME = os.environ.get("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
+PAYMENT_METHODS = ["bkash", "nagad", "rocket"]
+
+
+# =========================
+# DATABASE MODELS
+# =========================
 
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(40), unique=True, nullable=False)
+    username = db.Column(db.String(80), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    referral_code = db.Column(db.String(20), unique=True, nullable=False)
-    referred_by = db.Column(db.String(20))
-    balance = db.Column(db.Integer, default=0, nullable=False)
+    referral_code = db.Column(
+        db.String(30), unique=True, nullable=False
+    )
+    referred_by = db.Column(db.String(30), nullable=True)
+    balance = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Withdrawal(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id"), nullable=False
+    )
     amount = db.Column(db.Integer, nullable=False)
     method = db.Column(db.String(20), nullable=False)
-    account_number = db.Column(db.String(40), nullable=False)
+    account_number = db.Column(db.String(50), nullable=False)
     status = db.Column(db.String(20), default="pending")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship("User", backref="withdrawals")
 
+    @property
+    def account(self):
+        return self.account_number
+
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(120), nullable=False)
-    description = db.Column(db.String(500), nullable=False)
-    reward = db.Column(db.Integer, nullable=False)
+    title = db.Column(db.String(150), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    reward = db.Column(db.Integer, default=0)
     active = db.Column(db.Boolean, default=True)
 
 
 class TaskClaim(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
-    task_id = db.Column(db.Integer, db.ForeignKey("task.id"), nullable=False)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("user.id"), nullable=False
+    )
+    task_id = db.Column(
+        db.Integer, db.ForeignKey("task.id"), nullable=False
+    )
     status = db.Column(db.String(20), default="pending")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    user = db.relationship("User")
-    task = db.relationship("Task")
+    user = db.relationship("User", backref="task_claims")
+    task = db.relationship("Task", backref="claims")
 
     __table_args__ = (
         db.UniqueConstraint(
-            "user_id", "task_id", name="unique_user_task"
+            "user_id", "task_id", name="unique_user_task_claim"
         ),
     )
 
 
-def me():
-    uid = session.get("user_id")
-    return db.session.get(User, uid) if uid else None
+# =========================
+# LOGIN HELPERS
+# =========================
+
+def current_user():
+    user_id = session.get("user_id")
+    if not user_id:
+        return None
+    return db.session.get(User, user_id)
 
 
-def login_required(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        if not me():
+def login_required(function):
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        if not current_user():
             return redirect(url_for("login"))
-        return fn(*args, **kwargs)
-    return wrapped
+        return function(*args, **kwargs)
+    return wrapper
 
 
-def admin_required(fn):
-    @wraps(fn)
-    def wrapped(*args, **kwargs):
-        if not session.get("admin"):
+def admin_required(function):
+    @wraps(function)
+    def wrapper(*args, **kwargs):
+        if not session.get("is_admin"):
             return redirect(url_for("admin_login"))
-        return fn(*args, **kwargs)
-    return wrapped
+        return function(*args, **kwargs)
+    return wrapper
 
 
-@app.context_processor
-def common():
-    return {
-        "logged_user": me(),
-        "site_name": "Earn Master BD"
-    }
-
+# =========================
+# HOME
+# =========================
 
 @app.route("/")
 def home():
-    return render_template("home.html")
+    return render_template(
+        "home.html",
+        join_bonus=JOIN_BONUS,
+        min_withdrawal=MIN_WITHDRAWAL,
+        required_referrals=REQUIRED_REFERRALS
+    )
 
+
+# =========================
+# REGISTER
+# =========================
 
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        username = request.form.get("username", "").strip().lower()
+        username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
-        ref = request.form.get("referral", "").strip()
+        referral = request.form.get("referral", "").strip()
 
-        if len(username) < 3 or len(username) > 40 or len(password) < 8:
-            flash("ইউজারনেম ৩ অক্ষর এবং পাসওয়ার্ড ৮ অক্ষরের হতে হবে।", "error")
+        if not username or not password:
+            flash("সব তথ্য পূরণ করুন।", "error")
+            return redirect(url_for("register"))
+
+        if len(password) < 6:
+            flash("পাসওয়ার্ড কমপক্ষে ৬ অক্ষরের হতে হবে।", "error")
             return redirect(url_for("register"))
 
         if User.query.filter_by(username=username).first():
-            flash("এই ইউজারনেম আগে থেকেই আছে।", "error")
+            flash("এই ইউজারনেম আগে থেকেই ব্যবহার করা হয়েছে।", "error")
             return redirect(url_for("register"))
 
-        parent = User.query.filter_by(
-            referral_code=ref
-        ).first() if ref else None
+        referrer = None
+        if referral:
+            referrer = User.query.filter_by(
+                referral_code=referral
+            ).first()
 
-        code = secrets.token_urlsafe(8)[:12]
+            if not referrer:
+                flash("রেফারেল কোড সঠিক নয়।", "error")
+                return redirect(url_for("register"))
 
-        while User.query.filter_by(referral_code=code).first():
-            code = secrets.token_urlsafe(8)[:12]
-
-        user = User(
+        new_user = User(
             username=username,
             password_hash=generate_password_hash(password),
-            referral_code=code,
-            referred_by=parent.referral_code if parent else None,
+            referral_code=secrets.token_hex(5).upper(),
+            referred_by=referrer.referral_code if referrer else None,
             balance=JOIN_BONUS
         )
 
-        db.session.add(user)
+        db.session.add(new_user)
+
+        if referrer:
+            referrer.balance += 2
+
         db.session.commit()
 
-        session["user_id"] = user.id
-
-        flash("অ্যাকাউন্ট তৈরি হয়েছে। ৳২ বোনাস পেয়েছেন।", "success")
-        return redirect(url_for("dashboard"))
+        flash("রেজিস্ট্রেশন সফল হয়েছে। এখন লগইন করুন।", "success")
+        return redirect(url_for("login"))
 
     return render_template(
         "register.html",
@@ -165,10 +211,14 @@ def register():
     )
 
 
+# =========================
+# LOGIN / LOGOUT
+# =========================
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        username = request.form.get("username", "").strip().lower()
+        username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
 
         user = User.query.filter_by(username=username).first()
@@ -178,7 +228,7 @@ def login():
             session["user_id"] = user.id
             return redirect(url_for("dashboard"))
 
-        flash("লগইন তথ্য সঠিক নয়।", "error")
+        flash("ইউজারনেম অথবা পাসওয়ার্ড ভুল।", "error")
 
     return render_template("login.html")
 
@@ -189,10 +239,14 @@ def logout():
     return redirect(url_for("home"))
 
 
+# =========================
+# USER DASHBOARD
+# =========================
+
 @app.route("/dashboard")
 @login_required
 def dashboard():
-    user = me()
+    user = current_user()
 
     referrals = User.query.filter_by(
         referred_by=user.referral_code
@@ -201,90 +255,126 @@ def dashboard():
     tasks = Task.query.filter_by(active=True).all()
 
     claims = {
-        c.task_id: c.status
-        for c in TaskClaim.query.filter_by(user_id=user.id).all()
+        claim.task_id: claim.status
+        for claim in TaskClaim.query.filter_by(
+            user_id=user.id
+        ).all()
     }
+
+    referral_url = url_for(
+        "register",
+        ref=user.referral_code,
+        _external=True
+    )
 
     return render_template(
         "dashboard.html",
-        u=user,
-        refs=referrals,
+        user=user,
+        referral_count=referrals,
+        referral_url=referral_url,
         tasks=tasks,
         claims=claims
     )
 
 
-@app.post("/task/<int:tid>/claim")
+# =========================
+# TASK CLAIM
+# =========================
+
+@app.route("/task/<int:task_id>/claim", methods=["POST"])
 @login_required
-def claim(tid):
-    user = me()
-    task = db.session.get(Task, tid)
+def claim_task(task_id):
+    user = current_user()
+    task = db.session.get(Task, task_id)
 
     if not task or not task.active:
-        flash("কাজটি পাওয়া যায়নি।", "error")
+        flash("টাস্ক পাওয়া যায়নি।", "error")
+        return redirect(url_for("dashboard"))
 
-    elif TaskClaim.query.filter_by(
-        user_id=user.id, task_id=tid
-    ).first():
-        flash("এই কাজের আবেদন আগে হয়েছে।", "error")
+    existing = TaskClaim.query.filter_by(
+        user_id=user.id,
+        task_id=task.id
+    ).first()
 
-    else:
-        db.session.add(
-            TaskClaim(user_id=user.id, task_id=tid)
-        )
-        db.session.commit()
+    if existing:
+        flash("এই টাস্কের জন্য আগেই আবেদন করেছেন।", "error")
+        return redirect(url_for("dashboard"))
 
-        flash("আবেদন জমা হয়েছে। অ্যাডমিন যাচাই করবেন।", "success")
+    claim = TaskClaim(
+        user_id=user.id,
+        task_id=task.id,
+        status="pending"
+    )
 
+    db.session.add(claim)
+    db.session.commit()
+
+    flash("টাস্ক জমা হয়েছে। অ্যাডমিন যাচাই করবেন।", "success")
     return redirect(url_for("dashboard"))
 
 
-@app.post("/withdraw")
+# =========================
+# WITHDRAW
+# =========================
+
+@app.route("/withdraw", methods=["POST"])
 @login_required
 def withdraw():
-    user = me()
-
-    referrals = User.query.filter_by(
-        referred_by=user.referral_code
-    ).count()
+    user = current_user()
 
     try:
         amount = int(request.form.get("amount", "0"))
-    except (ValueError, TypeError):
-        amount = 0
+    except ValueError:
+        flash("সঠিক টাকার পরিমাণ লিখুন।", "error")
+        return redirect(url_for("dashboard"))
 
-    method = request.form.get("method", "").lower()
-    account = request.form.get("account_number", "").strip()
+    method = request.form.get("method", "").lower().strip()
+    account = request.form.get("account", "").strip()
 
-    if referrals < REQUIRED_REFERRALS:
-        flash("উত্তোলনের আগে ৩ জন সফল রেফার পূর্ণ করুন।", "error")
+    referral_count = User.query.filter_by(
+        referred_by=user.referral_code
+    ).count()
 
-    elif amount < MIN_WITHDRAWAL:
-        flash("সর্বনিম্ন উত্তোলন ৳১০০।", "error")
+    if amount < MIN_WITHDRAWAL:
+        flash(f"সর্বনিম্ন উত্তোলন {MIN_WITHDRAWAL} টাকা।", "error")
+
+    elif referral_count < REQUIRED_REFERRALS:
+        flash(
+            f"উত্তোলনের আগে {REQUIRED_REFERRALS} জন সফল রেফারেল লাগবে।",
+            "error"
+        )
 
     elif amount > user.balance:
-        flash("আপনার ব্যালেন্স যথেষ্ট নয়।", "error")
+        flash("আপনার ব্যালেন্স পর্যাপ্ত নয়।", "error")
 
-    elif method not in ("bkash", "nagad", "rocket") or not account:
-        flash("সঠিক পেমেন্ট মাধ্যম ও নম্বর দিন।", "error")
+    elif method not in PAYMENT_METHODS:
+        flash("পেমেন্ট মেথড সঠিক নয়।", "error")
+
+    elif not account:
+        flash("পেমেন্ট অ্যাকাউন্ট নম্বর লিখুন।", "error")
 
     else:
         user.balance -= amount
 
-        db.session.add(
-            Withdrawal(
-                user_id=user.id,
-                amount=amount,
-                method=method,
-                account_number=account
-            )
+        withdrawal = Withdrawal(
+            user_id=user.id,
+            amount=amount,
+            method=method,
+            account_number=account,
+            status="pending"
         )
 
+        db.session.add(withdrawal)
         db.session.commit()
-        flash("উত্তোলনের আবেদন জমা হয়েছে।", "success")
+
+        flash("উইথড্র আবেদন জমা হয়েছে।", "success")
 
     return redirect(url_for("dashboard"))
 
+
+# =========================
+# ADMIN LOGIN
+# =========================
 
 @app.route("/admin/login", methods=["GET", "POST"])
 def admin_login():
@@ -292,105 +382,174 @@ def admin_login():
         username = request.form.get("username", "")
         password = request.form.get("password", "")
 
-        if ADMIN_PASSWORD and username == ADMIN_USERNAME and secrets.compare_digest(
-            password, ADMIN_PASSWORD
+        if (
+            ADMIN_PASSWORD
+            and username == ADMIN_USERNAME
+            and password == ADMIN_PASSWORD
         ):
             session.clear()
-            session["admin"] = True
+            session["is_admin"] = True
             return redirect(url_for("admin"))
 
-        flash("অ্যাডমিন লগইন ব্যর্থ।", "error")
+        flash("অ্যাডমিন তথ্য সঠিক নয়।", "error")
 
     return render_template("admin_login.html")
 
 
 @app.route("/admin/logout")
 def admin_logout():
-    session.pop("admin", None)
-    return redirect(url_for("admin_login"))
+    session.clear()
+    return redirect(url_for("home"))
 
+
+# =========================
+# ADMIN PANEL
+# =========================
 
 @app.route("/admin")
 @admin_required
 def admin():
+    withdrawals = Withdrawal.query.order_by(
+        Withdrawal.created_at.desc()
+    ).all()
+
+    claims = TaskClaim.query.order_by(
+        TaskClaim.created_at.desc()
+    ).all()
+
+    tasks = Task.query.order_by(Task.id.desc()).all()
+
+    users = User.query.order_by(User.id.desc()).all()
+
     return render_template(
         "admin.html",
-        users=User.query.order_by(User.id.desc()).limit(200).all(),
-        withdrawals=Withdrawal.query.filter_by(status="pending").all(),
-        claims=TaskClaim.query.filter_by(status="pending").all()
+        withdrawals=withdrawals,
+        claims=claims,
+        tasks=tasks,
+        users=users
     )
 
 
-@app.post("/admin/withdraw/<int:wid>/<action>")
+# =========================
+# ADMIN: ADD TASK
+# =========================
+
+@app.route("/admin/task", methods=["POST"])
 @admin_required
-def admin_withdraw(wid, action):
-    item = db.session.get(Withdrawal, wid)
-
-    if item and item.status == "pending" and action in ("approve", "reject"):
-        item.status = action
-
-        if action == "reject":
-            item.user.balance += item.amount
-
-        db.session.commit()
-
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/claim/<int:cid>/<action>")
-@admin_required
-def admin_claim(cid, action):
-    claim = db.session.get(TaskClaim, cid)
-
-    if claim and claim.status == "pending" and action in ("approve", "reject"):
-        claim.status = action
-
-        if action == "approve":
-            claim.user.balance += claim.task.reward
-
-        db.session.commit()
-
-    return redirect(url_for("admin"))
-
-
-@app.post("/admin/task")
-@admin_required
-def add_task():
+def admin_add_task():
     title = request.form.get("title", "").strip()
     description = request.form.get("description", "").strip()
 
     try:
         reward = int(request.form.get("reward", "0"))
-    except (ValueError, TypeError):
+    except ValueError:
         reward = 0
 
-    if title and description and 1 <= reward <= 1000:
-        db.session.add(
-            Task(
-                title=title,
-                description=description,
-                reward=reward
-            )
-        )
-        db.session.commit()
-        flash("নতুন কাজ যোগ হয়েছে।", "success")
-    else:
-        flash("সঠিক কাজের তথ্য দিন।", "error")
+    if not title or reward <= 0:
+        flash("টাস্কের নাম ও সঠিক পুরস্কার লিখুন।", "error")
+        return redirect(url_for("admin"))
 
+    task = Task(
+        title=title,
+        description=description,
+        reward=reward,
+        active=True
+    )
+
+    db.session.add(task)
+    db.session.commit()
+
+    flash("নতুন টাস্ক যোগ হয়েছে।", "success")
     return redirect(url_for("admin"))
 
 
-@app.get("/health")
-def health():
-    return {"ok": True, "service": "Earn Master BD"}
+# =========================
+# ADMIN: WITHDRAWAL ACTION
+# =========================
 
+@app.route("/admin/withdraw/<int:wid>", methods=["POST"])
+@admin_required
+def admin_withdraw(wid):
+    withdrawal = db.session.get(Withdrawal, wid)
+
+    if not withdrawal:
+        flash("উইথড্র আবেদন পাওয়া যায়নি।", "error")
+        return redirect(url_for("admin"))
+
+    action = request.form.get("action", "")
+
+    if withdrawal.status != "pending":
+        flash("এই আবেদনটি আগেই প্রক্রিয়া করা হয়েছে।", "error")
+        return redirect(url_for("admin"))
+
+    if action == "approve":
+        withdrawal.status = "approved"
+        flash("উইথড্র অনুমোদন করা হয়েছে।", "success")
+
+    elif action == "reject":
+        withdrawal.status = "rejected"
+        withdrawal.user.balance += withdrawal.amount
+        flash("উইথড্র বাতিল হয়েছে এবং টাকা ফেরত দেওয়া হয়েছে।", "success")
+
+    db.session.commit()
+    return redirect(url_for("admin"))
+
+
+# =========================
+# ADMIN: TASK CLAIM ACTION
+# =========================
+
+@app.route("/admin/claim/<int:cid>", methods=["POST"])
+@admin_required
+def admin_claim(cid):
+    claim = db.session.get(TaskClaim, cid)
+
+    if not claim:
+        flash("টাস্ক আবেদন পাওয়া যায়নি।", "error")
+        return redirect(url_for("admin"))
+
+    action = request.form.get("action", "")
+
+    if claim.status != "pending":
+        flash("এই আবেদনটি আগেই যাচাই করা হয়েছে।", "error")
+        return redirect(url_for("admin"))
+
+    if action == "approve":
+        claim.status = "approved"
+        claim.user.balance += claim.task.reward
+        flash("টাস্ক অনুমোদন হয়েছে এবং পুরস্কার যোগ হয়েছে।", "success")
+
+    elif action == "reject":
+        claim.status = "rejected"
+        flash("টাস্ক আবেদন বাতিল হয়েছে।", "success")
+
+    db.session.commit()
+    return redirect(url_for("admin"))
+
+
+# =========================
+# HEALTH CHECK
+# =========================
+
+@app.route("/health")
+def health():
+    return {"status": "ok"}, 200
+
+
+# =========================
+# CREATE DATABASE TABLES
+# =========================
 
 with app.app_context():
     db.create_all()
 
 
+# =========================
+# RUN
+# =========================
+
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
-        port=int(os.environ.get("PORT", 10000))
+        port=int(os.environ.get("PORT", 5000))
     )

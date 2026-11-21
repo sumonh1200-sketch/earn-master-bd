@@ -1,0 +1,73 @@
+
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Admin Panel - Earn Master BD</title>
+</head>
+<body>
+    <h1>Earn Master BD - Admin Panel</h1>
+
+    <p><a href="/logout">লগআউট</a></p>
+
+    <h2>নতুন কাজ যোগ করুন</h2>
+    <form method="POST" action="/admin/task">
+        <input name="title" placeholder="কাজের নাম" required>
+        <br><br>
+        <textarea name="description" placeholder="কাজের বিবরণ"></textarea>
+        <br><br>
+        <input name="reward" type="number" step="0.01" min="0" placeholder="পুরস্কার" required>
+        <br><br>
+        <button type="submit">কাজ যোগ করুন</button>
+    </form>
+
+    <hr>
+    <h2>সাম্প্রতিক ব্যবহারকারী</h2>
+    {% for user in users %}
+        <p>{{ user.username }} | ব্যালেন্স: ৳{{ user.balance }} | রেফার কোড: {{ user.referral_code }}</p>
+    {% else %}
+        <p>কোনো ব্যবহারকারী নেই।</p>
+    {% endfor %}
+
+    <hr>
+    <h2>উইথড্র আবেদন</h2>
+    {% for item in withdrawals %}
+        <p>
+            {{ item.user.username }} |
+            ৳{{ item.amount }} |
+            {{ item.method }} |
+            {{ item.account }} |
+            {{ item.status }}
+        </p>
+        {% if item.status == "pending" %}
+            <form method="POST" action="/admin/withdraw/{{ item.id }}">
+                <button name="action" value="approve">অনুমোদন</button>
+                <button name="action" value="reject">বাতিল</button>
+            </form>
+        {% endif %}
+        <hr>
+    {% else %}
+        <p>কোনো আবেদন নেই।</p>
+    {% endfor %}
+
+    <h2>কাজের আবেদন</h2>
+    {% for claim in claims %}
+        <p>
+            {{ claim.user.username }} |
+            {{ claim.task.title }} |
+            ৳{{ claim.task.reward }} |
+            {{ claim.status }}
+        </p>
+        {% if claim.status == "pending" %}
+            <form method="POST" action="/admin/claim/{{ claim.id }}">
+                <button name="action" value="approve">অনুমোদন</button>
+                <button name="action" value="reject">বাতিল</button>
+            </form>
+        {% endif %}
+        <hr>
+    {% else %}
+        <p>কোনো কাজের আবেদন নেই।</p>
+    {% endfor %}
+</body>
+</html>
